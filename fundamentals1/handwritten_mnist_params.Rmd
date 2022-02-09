@@ -1,0 +1,94 @@
+---
+title: "The MNIST data base"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+output:
+  html_document:
+    toc: yes
+    toc_float: true
+    number_section: true
+    theme: united
+    highlight: tango
+  pdf_document:
+    toc: yes
+params:
+  fold: "." 
+  fn: "train.csv"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+The MNIST database of handwritten digits has a training set of 60,000 examples, and a test set of 10,000 examples. It is a subset of a larger set available from NIST. The digits have been size-normalized and centered in a fixed-size image. The original NIST's training dataset was taken from American Census Bureau employees, while the testing dataset was taken from American high school students. For MNIST dataset, half of the training set and half of the test set were taken from NIST's training dataset, while the other half of the training set and the other half of the test set were taken from NIST's testing dataset.
+
+The MNIST data base can be found in the followed link
+
+<http://yann.lecun.com/exdb/mnist/>
+
+and
+
+<https://www.kaggle.com/c/digit-recognizer/data>
+
+The NIST data base can be found in the followed link
+
+<https://www.nist.gov/srd/nist-special-database-19>
+
+
+The original black and white (bilevel) images from NIST were size normalized to fit in a 20x20 pixel box while preserving their aspect ratio. The resulting images contain grey levels as a result of the anti-aliasing technique used by the normalization algorithm. the images were centered in a 28x28 image by computing the center of mass of the pixels, and translating the image so as to position this point at the center of the 28x28 field. 
+
+```{r assignments, echo=FALSE, eval=FALSE}
+fold <- "."
+fn <- "train.csv"
+```
+
+## Data description
+
+The data files train.csv and test.csv contain gray-scale images of hand-drawn digits, from zero through nine.
+
+Each image is 28 pixels in height and 28 pixels in width, for a total of 784 pixels in total. Each pixel has a single pixel-value associated with it, indicating the lightness or darkness of that pixel, with higher numbers meaning darker. This pixel-value is an integer between 0 and 255, inclusive.
+
+The training data set, (train.csv), has 785 columns. The first column, called "label", is the digit that was drawn by the user. The rest of the columns contain the pixel-values of the associated image.
+
+Each pixel column in the training set has a name like pixelx, where x is an integer between 0 and 783, inclusive. To locate this pixel on the image, suppose that we have decomposed x as x = i * 28 + j, where i and j are integers between 0 and 27, inclusive. Then pixelx is located on row i and column j of a 28 x 28 matrix, (indexing by zero).
+
+For example, pixel31 indicates the pixel that is in the fourth column from the left, and the second row from the top.
+
+
+## Read Train Data
+The train.csv file contains 42000 rows and 785 columns. The first column named label is the digit in question, the other 784 (from pixel 0 to pixel 783) represent each pixel of the image, with a value between 0 and 255.
+
+```{r}
+train <- read.csv(file=file.path(params$fold,params$fn))
+```
+
+## Explore and prepare the data
+
+We check the gray-scale image of a number which is turned to the left.
+
+```{r}
+# We create a 28 x 28 matrix, then we load a train element, 
+# especifically the row 10 that corresponds to number 3.
+
+m = matrix(unlist(train[10,-1]), nrow = 28, byrow = TRUE)
+
+# Display a gray-scale image of a number which is turned to the left
+image(m,col=grey.colors(255))
+```
+
+If you want a correct visualization, you can rotate it using the following formula. This example shows the first 6 digits corresponding to the 6 first rows of the train file (without counting headers). The display is in 2 rows and 3 columns.
+
+```{r}
+ #Rotation function
+rotate <- function(x) t(apply(x, 2, rev)) 
+
+# Show the 6 first rows
+par(mfrow=c(2,3)) # Create a matrix to display the 6 images from 2 rows x 3 columns
+for (i in 1:6) {
+  image(rotate(matrix(unlist(train[i,-1]),nrow = 28, byrow = TRUE)),
+        col=grey.colors(255),
+        xlab=train[i,1])
+}
+par(mfrow=c(1,1)) # Come back to initial state of visualization in par() function.
+```
