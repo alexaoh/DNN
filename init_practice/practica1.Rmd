@@ -1,0 +1,153 @@
+---
+title: "Initial Practice "
+subtitle: "Statistical learning with deep artificial neural networks"
+author: "Alexander J Ohrt"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  pdf_document:
+    number_sections: true
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    theme: readable
+    highlight: textmate
+    number_sections: true
+editor_options: 
+  chunk_output_type: console
+---
+
+\tableofcontents
+\newpage
+
+```{r setup, include=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE, warning = F, comment = "#>")
+setwd("/home/ajo/gitRepos/DNN/init_practice")
+library(dplyr)
+library(keras)
+```
+
+# Introduction
+
+We are working on a dataset describing Parkinson's disease. Click [here](https://archive.ics.uci.edu/ml/datasets/Parkinsons+Telemonitoring) for more information regarding the dataset. In short, the dataset is composed of a range of biomedical voice measurements from 42 people with early-stage Parkinson's disease recruited to a six-month trial of a telemonitoring device for remote symptom progression monitoring. 
+
+The main objective is to predict the severity of Parkinson's disease based on the data. More details are given in the following. 
+
+# Load the Parkinsons Data
+
+```{r}
+data <- read.csv("parkinsons_updrs.data")
+str(data)
+summary(data)
+```
+
+# Description of the Variables
+
+As we have seen above, the dataset contains `r dim(data)[[1]]` rows, i.e. `r dim(data)[[1]]` measurements. The columns consist of **patient ID**, **age**, **sex**, **time interval since enrollment date**, **motor_UPDRS**, **total_UPDRS** and 16 voice biomedical measurements. The variables are the following
+
+* subject# - Integer that uniquely identifies each subject
+* age - Subject age
+* sex - Subject gender '0' - male, '1' - female
+* test_time - Time since recruitment into the trial. The integer part is the number of days since recruitment.
+* motor_UPDRS - Clinician's motor UPDRS score, linearly interpolated
+*ctotal_UPDRS - Clinician's total UPDRS score, linearly interpolated
+* Jitter(%),Jitter(Abs),Jitter:RAP,Jitter:PPQ5,Jitter:DDP - Several measures of variation in fundamental frequency
+* Shimmer,Shimmer(dB),Shimmer:APQ3,Shimmer:APQ5,Shimmer:APQ11,Shimmer:DDA - Several measures of variation in amplitude
+* NHR,HNR - Two measures of ratio of noise to tonal components in the voice
+* RPDE - A nonlinear dynamical complexity measure
+* DFA - Signal fractal scaling exponent
+* PPE - A nonlinear measure of fundamental frequency variation 
+
+As noted, the objective is to predict the severity of the disease, where severity is defined based on the variable **total_UPDRS**: The disease is severe if **total_UPDRS > 25**. This variable is created below. 
+
+# Create the Binary Variable of Parkinson's Severity
+
+```{r}
+data$severity <- data$total_UPDRS > 25
+dim(data)
+summary(data$severity)
+```
+
+# Normalization
+
+The variables of the 16 voice measurements are normalized by means of the min-max transformation.
+
+```{r}
+normalize <- function(x) {
+    return((x- min(x))/(max(x)-min(x)))
+}
+
+for (i in 1:16){
+  data[, 6+i] <- normalize(data[,6+i])
+}
+
+summary(data)
+```
+
+# Separation into Train and Test Data
+
+I will use (pseudo-) random sampling to separate the data into a training and test set. 
+
+```{r}
+set.seed(1)
+ratio <- 0.9
+sample.size <- floor(nrow(data) * ratio)
+train.indices <- sample(1:nrow(data), size = sample.size)
+train <- data[train.indices, ]
+test <- data[-train.indices, ]
+
+x_train <- data.matrix(train[,-23]) ; y_train <- to_categorical(train[, 23], num_classes = 2)
+x_test <- data.matrix(test[,-23]) ; y_test <- to_categorical(test[, 23], num_classes = 2)
+```
+
+
+# Implementation of a DNN
+
+A dense deep neural network (DNN) for severity prediction is made. It has two hidden layers, with 10 nodes in each hidden layer. 
+
+```{r}
+set.seed(1)
+# defining the model and layers
+model <- keras_model_sequential()
+model %>%
+layer_dense(units = 10, activation = 'relu', input_shape = c(ncol(x_train))) %>%
+layer_dense(units = 10, activation = 'relu') %>%
+layer_dense(units = ncol(y_train), activation = 'sigmoid')
+
+summary(model)
+
+# compile (define loss and optimizer)
+model %>% compile(loss = 'binary_crossentropy',
+                  optimizer = optimizer_rmsprop(),
+                  metrics = c('accuracy'))
+# train (fit)
+history <- model %>% fit(data.matrix(x_train), y_train, epochs = 40, 
+              batch_size = 256, validation_split = 0.2)
+# plot
+plot(history)
+
+# evaluate
+model %>% evaluate(x_test, y_test)
+```
+
+
+# Predictions 
+
+```{r}
+# keras/tensorflow version >= 2.6
+# se obtiene un objeto tf.tensor
+y_pred <- model %>% predict(x_test) %>% k_argmax()
+# se pasa a vector
+# https://tensorflow.rstudio.com/guide/tensorflow/tensors/
+#y_pred <- y_pred %>% shape() %>% unlist() (2022/02/08 no funciona???)
+y_pred <- as.array(y_pred)
+(tab <- table("Predictions" = y_pred, "Labels" = test[, 23]))
+
+# accuracy in predictions (as shown with the "evaluate" above).
+(tab[1]+tab[4])/sum(tab)
+
+# Gå gjennom denne guiden raskt for å se hva vedkommende gjør også!
+# https://towardsdatascience.com/how-to-create-a-sequential-model-in-keras-for-r-1437aaf778e2
+
+```
