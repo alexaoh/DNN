@@ -62,8 +62,6 @@ As we have seen above, the dataset contains `r dim(data)[[1]]` rows, i.e. `r dim
 
 As noted, the objective is to predict the severity of the disease, where severity is defined based on the variable **total_UPDRS**: The disease is severe if **total_UPDRS > 25**. This variable is created below. 
 
-BESKRIV LITT MER KRING HVA DE 16 BIOMEDISINSKE VARIABLENE ER (IKKE BARE KOPIERE FRA NETTSIDEN SLIK JEG HAR GJORT OVER!)
-
 # Create the Binary Variable of Parkinson's Severity
 
 ```{r}
@@ -93,8 +91,8 @@ summary(data)
 I will use (pseudo-) random sampling to separate the data into a training and test set. 
 
 ```{r, results='hide'}
-set.seed(1)
-ratio <- 0.9
+#set.seed(1)
+ratio <- 0.7
 sample.size <- floor(nrow(data) * ratio)
 train.indices <- sample(1:nrow(data), size = sample.size)
 train <- data[train.indices, ]
@@ -116,7 +114,7 @@ A dense deep neural network (DNN) for severity prediction is made. It has two hi
 Since we have two output nodes in this variant, we should use the *softmax* activation function in the output and the *categorical_crossentropy* loss function. 
 
 ```{r}
-set.seed(1)
+#set.seed(1)
 # defining the model and layers
 model <- keras_model_sequential() %>%
   layer_dense(units = 10, activation = 'relu', input_shape = c(ncol(x_train))) %>%
@@ -130,8 +128,8 @@ model %>% compile(loss = 'categorical_crossentropy',
                   optimizer = optimizer_rmsprop(),
                   metrics = c('accuracy'))
 # train (fit)
-history <- model %>% fit(data.matrix(x_train), y_train, epochs = 40, 
-              batch_size = 256, validation_split = 0.2)
+history <- model %>% fit(data.matrix(x_train), y_train, epochs = 50, 
+              batch_size = 128, validation_split = 0.2)
 # plot
 plot(history)
 
@@ -142,7 +140,7 @@ model %>% evaluate(x_train, y_train)
 model %>% evaluate(x_test, y_test)
 ```
 
-## Variant B
+## Variant B: One Output Node
 
 Since we have one output nodes in this variant, we should use the *sigmoid* activation function in the output and the *binary_crossentropy* loss function. 
 
@@ -164,8 +162,8 @@ model2 %>% compile(loss = 'binary_crossentropy',
                   optimizer = optimizer_rmsprop(),
                   metrics = c('accuracy'))
 # train (fit)
-history2 <- model2 %>% fit(data.matrix(x_train), y_train2, epochs = 40, 
-              batch_size = 256, validation_split = 0.2)
+history2 <- model2 %>% fit(data.matrix(x_train), y_train2, epochs = 50, 
+              batch_size = 128, validation_split = 0.2)
 # plot
 plot(history2)
 
@@ -176,6 +174,7 @@ model2 %>% evaluate(x_train, y_train2)
 model2 %>% evaluate(x_test, y_test2)
 ```
 
+Note that the accuracy is reported as being higher for the test set compared to the training set in both variants (in many runs). This should not happen, but it looks like it does not happen when I do not min-max transform the data. Why? I have not been able to find an error, e.g. in the transform or in the test/train split. 
 
 # Predictions 
 
