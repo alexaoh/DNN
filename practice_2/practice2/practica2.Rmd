@@ -1,0 +1,301 @@
+---
+title: "Practice 2: Hyperparameter Tuning of Initial Practice (Parkinson's Disease)"
+subtitle: "Statistical Learning with Deep Artificial Neural Networks"
+author: "Alexander J Ohrt"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  pdf_document:
+    number_sections: true
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    theme: readable
+    highlight: textmate
+    number_sections: true
+editor_options: 
+  chunk_output_type: console
+urlcolor: blue
+---
+
+\tableofcontents
+\newpage
+
+```{r setup, include=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE, warning = F, comment = "#>")
+setwd("/home/ajo/gitRepos/DNN/practice_2")
+library(dplyr)
+library(keras)
+library(caret)
+library(tfruns)
+```
+
+# Introduction
+
+We are working on a dataset describing Parkinson's disease. Click [here](https://archive.ics.uci.edu/ml/datasets/Parkinsons+Telemonitoring) for more information regarding the dataset. In short, the dataset is composed of a range of biomedical voice measurements from 42 people with early-stage Parkinson's disease recruited to a six-month trial of a telemonitoring device for remote symptom progression monitoring. 
+
+The main objective is to predict the severity of Parkinson's disease based on the data. More details are given in the following. 
+
+# Load the Parkinsons Data
+
+```{r}
+data <- read.csv("../practice_1/parkinsons_updrs.data")
+str(data)
+summary(data)
+```
+
+# Description of the Variables
+
+As we have seen above, the dataset contains `r dim(data)[[1]]` rows, i.e. `r dim(data)[[1]]` measurements. The columns consist of **patient ID**, **age**, **sex**, **time interval since enrollment date**, **motor_UPDRS**, **total_UPDRS** and 16 voice biomedical measurements. The variables are the following
+
+* subject. - The patient ID. Integer that uniquely identifies each subject.
+* age - Age of each subject. 
+* sex - Gender of the subject; '0' = male and '1' = female.
+* test_time - Time since recruitment into the trial. The integer part is the number of days since recruitment.
+* motor_UPDRS - Clinician's motor UPDRS score, linearly interpolated.
+* ctotal_UPDRS - Clinician's total UPDRS score, linearly interpolated.
+* Jitter(%), Jitter(Abs), Jitter:RAP, Jitter:PPQ5, Jitter:DDP - Several measures of variation in fundamental frequency.
+* Shimmer, Shimmer(dB), Shimmer:APQ3, Shimmer:APQ5, Shimmer:APQ11, Shimmer:DDA - Several measures of variation in amplitude.
+* NHR, HNR - Two measures of ratio of noise to tonal components in the voice.
+* RPDE - A nonlinear dynamical complexity measure.
+* DFA - Signal fractal scaling exponent.
+* PPE - A nonlinear measure of fundamental frequency variation.
+
+As noted, the objective is to predict the severity of the disease, where severity is defined based on the variable **total_UPDRS**: The disease is severe if **total_UPDRS > 25**. This variable is created below. 
+
+# Create the Binary Variable of Parkinson's Severity
+
+```{r}
+data$severity <- data$total_UPDRS > 25
+dim(data)
+summary(data$severity)
+```
+
+# Normalization
+
+The variables of the 16 voice measurements are normalized by means of the min-max transformation.
+
+```{r}
+(biom_voice_mesures <- names(data)[7:22])
+mydata <- data[, biom_voice_mesures]
+
+normalize <- function(x) {
+    return((x- min(x))/(max(x)-min(x)))
+}
+
+mydata <- as.data.frame(lapply(mydata, normalize))
+summary(mydata)
+```
+
+# Separation into Train and Test Data
+
+I will use (pseudo-) random sampling to separate the data into a training and test set. 
+
+```{r, results='hide'}
+#set.seed(1)
+ratio <- 0.7
+sample.size <- floor(nrow(data) * ratio)
+train.indices <- sample(1:nrow(data), size = sample.size)
+train <- mydata[train.indices, ]
+test <- mydata[-train.indices, ]
+
+x_train <- data.matrix(train)
+y_train <- as.numeric(data[train.indices,]$severity)
+x_test <- data.matrix(test)
+y_test <- as.numeric(data[-train.indices,]$severity)
+```
+
+
+# Implementation of a Dense DNN
+
+A dense deep neural network (DNN) for severity prediction is made. Using the `tfruns` package, we will determine which of the following architectures provides the best accuracy:
+
+* Model 1: two hidden layers of 10 nodes each.
+* Model 2: three hideen layers of 20, 10 and 5 nodes respectively.
+* adding 40\% dropout between hidden layers.
+* adding l2 regularization on hidden layers. 
+
+## Using One Output Node for Classification
+
+Since we have one output node, we should use the *sigmoid* activation function in the output and the *binary_crossentropy* loss function. Moreover, I will be testing model 1 and model 2, both with and without dropout regularization and l2 regularization (in total 6 models). 
+
+```{r, eval = F}
+# Using tfruns to test all the alternative we are given in the task description. 
+for (model in 1:6){
+  training_run('neural_net.R', flags = c(model = model))
+}
+```
+
+The code that I used to build the different neural networks is displayed below. 
+
+```{r, eval = F}
+# Set hyperparameter flags.
+FLAGS <- flags(
+  flag_integer("model", 1)
+)
+
+# Defining the model and layers.
+if (FLAGS$model == 1){
+  model <- keras_model_sequential() %>%
+    layer_dense(units = 10, activation = 'relu', input_shape = c(ncol(x_train))) %>%
+    layer_dense(units = 10, activation = 'relu') %>%
+    layer_dense(units = 1, activation = 'sigmoid')
+} else if (FLAGS$model == 2){
+  model <- keras_model_sequential() %>%
+    layer_dense(units = 20, activation = 'relu', input_shape = c(ncol(x_train))) %>%
+    layer_dense(units = 10, activation = 'relu') %>%
+    layer_dense(units = 5, activation = 'relu') %>%
+    layer_dense(units = 1, activation = 'sigmoid')
+} else if (FLAGS$model == 3){
+  # Model 1 with dropout regularization between the layers. 
+  model <- keras_model_sequential() %>%
+    layer_dense(units = 10, activation = 'relu', input_shape = c(ncol(x_train))) %>%
+    layer_dropout (rate = 0.4) %>%
+    layer_dense(units = 10, activation = 'relu') %>%
+    layer_dropout (rate = 0.4) %>%
+    layer_dense(units = 1, activation = 'sigmoid')
+} else if (FLAGS$model == 4){
+  # Model 2 with dropout regularization between the layers. 
+  model <- keras_model_sequential() %>%
+    layer_dense(units = 20, activation = 'relu', input_shape = c(ncol(x_train))) %>%
+    layer_dropout (rate = 0.4) %>%
+    layer_dense(units = 10, activation = 'relu') %>%
+    layer_dropout (rate = 0.4) %>%
+    layer_dense(units = 5, activation = 'relu') %>%
+    layer_dropout (rate = 0.4) %>%
+    layer_dense(units = 1, activation = 'sigmoid')
+} else if (FLAGS$model == 5){
+  # Model 1 with l2 regularization on the hidden layers. 
+  model <- keras_model_sequential() %>%
+    layer_dense(units = 10, activation = 'relu', input_shape = c(ncol(x_train)), kernel_regularizer = regularizer_l2(l = 0.01)) %>%
+    layer_dense(units = 10, activation = 'relu', kernel_regularizer = regularizer_l2(l = 0.01)) %>%
+    layer_dense(units = 1, activation = 'sigmoid')
+} else (FLAGS$model == 6){
+  # Model 2 with l2 regularization on the hidden layers. 
+  model <- keras_model_sequential() %>%
+    layer_dense(units = 20, activation = 'relu', input_shape = c(ncol(x_train)), kernel_regularizer = regularizer_l2(l = 0.01)) %>%
+    layer_dense(units = 10, activation = 'relu', kernel_regularizer = regularizer_l2(l = 0.01)) %>%
+    layer_dense(units = 5, activation = 'relu', kernel_regularizer = regularizer_l2(l = 0.01)) %>%
+    layer_dense(units = 1, activation = 'sigmoid')
+}
+
+summary(model)
+
+# compile (define loss and optimizer)
+model %>% compile(loss = 'binary_crossentropy',
+                  optimizer = optimizer_rmsprop(),
+                  metrics = c('accuracy'))
+
+# train (fit)
+history <- model %>% fit(x_train, y_train, epochs = 100, 
+                         batch_size = 256, validation_split = 0.2)
+
+# plot
+plot(history)
+
+# evaluate on training data.
+score.train <- model %>% evaluate(x_train, y_train, verbose = 0)
+
+cat('Train loss:', score.train[1], '\n')
+cat('Train accuracy:', score.train[2], '\n')
+
+# evaluate on testing data. 
+score.test <- model %>% evaluate(x_test, y_test, verbose = 0)
+
+cat('Test loss:', score.test[1], '\n')
+cat('Test accuracy:', score.test[2], '\n')
+```
+
+Comparison using the `tfruns` package can be done with the commands given in the code below
+
+```{r, eval = F}
+latest_run() # Show the latest trained model. 
+ls_runs() # Show all trained models.
+ls_runs(metric_val_accuracy > 0.94, order = metric_val_accuracy) # Show a selection of trained models. 
+compare_runs() # Compare two runs (can be specified as an argument in the function).
+```
+
+```{r}
+ls_runs()
+```
+
+According to the list of all runs, the two first models (without either of the regularization techniques) have the smallest loss and largest accuracy. Thus, comparing those two models reveals that model 2 has the largest test accuracy (even though all these models are terrible in practice).
+
+```{r, eval = F}
+compare_runs(ls_runs(metric_val_accuracy > 0.69, order = metric_val_accuracy))
+```
+
+# Add Callbacks
+
+In order to improve the selected model (Model 2) further, we add the following callbacks, before re-training the model and making predictions. 
+
+```{r}
+checkpoint.filepath <- "checkpoint.h5"
+callbacks_list<-list(
+  callback_early_stopping(
+    monitor = "accuracy",
+    patience=30
+  ),
+  callback_model_checkpoint(
+    filepath = checkpoint.filepath,
+    monitor = "accuracy",
+    save_best_only = T
+  ),
+  callback_reduce_lr_on_plateau(
+    monitor="accuracy",
+    factor = 0.001,
+    patience = 8
+  )
+)
+```
+
+The first callback is used to stop training when accuracy stops improving. The patience is set to 30, which means that the training is stopped after 45 consecutive epochs where accuracy is not improved. 
+
+The second callback is used to save the best model found during training. The weights of this model can then be loaded into the environment afterwards, to ensure that we are using the best model found during training. 
+
+The last callback is used to reduce the learning rate when the accuracy has stopped improving. The patience is set to 8, which means that the learning rate will be decreased by a factor (set to 0.1) after 15 consecutive epochs of no improvement in accuracy. 
+
+```{r}
+model <- keras_model_sequential() %>%
+    layer_dense(units = 20, activation = 'relu', input_shape = c(ncol(x_train))) %>%
+    layer_dense(units = 10, activation = 'relu') %>%
+    layer_dense(units = 5, activation = 'relu') %>%
+    layer_dense(units = 1, activation = 'sigmoid')
+
+summary(model)
+
+# compile (define loss and optimizer)
+model %>% compile(loss = 'binary_crossentropy',
+                  optimizer = optimizer_rmsprop(),
+                  metrics = c('accuracy'))
+
+# train (fit)
+set.seed(1)
+history <- model %>% fit(x_train, y_train, epochs = 200, 
+                         batch_size = 256, validation_split = 0.2,
+                         callbacks = callbacks_list)
+
+final.model <- load_model_hdf5(checkpoint.filepath)
+```
+
+
+# Predictions 
+
+```{r, eval = T}
+# Predictions for one output node 
+y_pred <- model %>% predict(x_test) %>% `>`(0.5) %>% k_cast("int32")
+y_pred <- as.array(y_pred)
+y_pred2 <- as.array(final.model %>% predict(x_test) %>% `>`(0.5) %>% k_cast("int32"))
+all.equal(y_pred, y_pred2)
+(tab <- table("Predictions" = y_pred, "Labels" = y_test))
+
+# accuracy in predictions (as shown with the "evaluate" above).
+(tab[1]+tab[4])/sum(tab)
+
+# Better to do this with the package "caret".
+confusionMatrix(factor(y_pred), factor(y_test), positive = "1")
+confusionMatrix(factor(y_pred2), factor(y_test), positive = "1")
+```
+
+The accuracy is still not good for this model, even though it perhaps is the best model among the ones we tested. 
