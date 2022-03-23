@@ -12,7 +12,7 @@ library(pROC)
 ```
 
 ```{r}
-setwd("~/Docencia/curs21_22/UB/MESIO/DL/unitat3/Breast")
+setwd("/home/ajo/gitRepos/DNN/task1")
 clinical <- read_delim("clinical.csv","\t", escape_double = FALSE, trim_ws = TRUE)
 #gene_expression <- read_delim("gene_expression.csv","\t", escape_double = FALSE, trim_ws = TRUE)
 protein_abundance <- read_delim("protein_abundance.csv","\t", escape_double = FALSE, trim_ws = TRUE)
@@ -238,6 +238,7 @@ sae1 %>% fit(
   validation_split = 0.2
   )
 ```
+
 ```{r}
 #Generating with Autoencoder
 encoded_expression1 <- encoder1 %>% predict(as.matrix(xtrain))

@@ -1,0 +1,264 @@
+---
+title: "Task1"
+subtitle: "Statistical Learning with Deep Artificial Neural Networks"
+author: "Alexander J Ohrt"
+date: "`r format(Sys.time(), '%d. %b. %Y')`"
+output: 
+   html_document:
+    code_folding: show
+    theme: yeti
+    highlight: textmate
+    number_sections: true
+    toc: true
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = "#>", cache = T)
+library(keras)
+library(readr)
+library(pROC)
+library(tidyverse)
+library(caret)
+```
+
+# Protein Abundance and Gene Expression Datasets
+
+```{r}
+gene.exp <- read_delim("gene_expression.csv", "\t", escape_double = FALSE, trim_ws = TRUE)
+prot.ab <- read_delim("protein_abundance.csv", "\t", escape_double = FALSE, trim_ws = TRUE)
+clinical <- read_delim("clinical.csv","\t", escape_double = FALSE, trim_ws = TRUE)
+copy_number <- read_delim("copy_number.csv","\t", escape_double = FALSE, trim_ws = TRUE)
+```
+
+The dimensions of the protein abundance dataset are shown below. 
+
+```{r}
+dim(prot.ab)
+```
+
+```{r}
+all(complete.cases(prot.ab)) # TRUE: There are no missing values. 
+```
+
+The dataset has no missing values. It contains 410 unique patients, each of which has its own sampling code, where each patient has recorded a numerical value that gives abundance of 142 different proteins. 
+
+The dimensions of the gene expression dataset are shown below. 
+
+```{r}
+dim(gene.exp)
+```
+
+```{r}
+all(complete.cases(gene.exp)) # FALSE: There are missing values in some of the columns. 
+```
+
+The dataset has missing values. The missing values are removed from the dataset in the following block of code. 
+
+```{r}
+dim(gene.exp)
+gene.exp2 <- gene.exp[complete.cases(gene.exp),]
+dim(gene.exp2)
+```
+
+Before the rows with missing values are removed, the gene expression data contains `r dim(gene.exp)[[1]]` unique patients, each of which has its own sampling code. After the rows with missing data are removed, the gene expression data contains `r dim(gene.exp2)[[1]]` unique patients. 
+
+
+```{r}
+int1 <- intersect(gene.exp$Sample, prot.ab$Sample) 
+length(int1)
+int2 <- intersect(gene.exp2$Sample, prot.ab$Sample)
+length(int2)
+int3 <- intersect(int2, clinical$Sample)
+length(int3)
+```
+
+From the code above we can see that `r length(int1)` of the patients' sample codes exist in the protein abundance and the gene expression datasets, before removing the rows with missing values from the gene expression data. This is not interesting to us however, since we are only interested in individuals who don't have missing gene expression data. After removing the missing values from the gene expression data, the number of patients that have data available for both gene expression and protein abundance is `r length(int2)`. Moreover, `r length(int2)` of the patients' sample codes exist in all three datasets, when the `clinical` dataset is included and all missing values are removed. This means that this amount of patients have data of both types available. But do all these individuals have data concerning their breast invasive carcinoma (BRCA) estrogen receptor status? Next, we remove all the individuals that don't have this information. 
+
+```{r}
+xclin <- clinical[,c(1,9)]
+colnames(xclin) <- c("Sample", "BRCA")
+xclin <- xclin[clinical$Sample %in% int3, ]
+#xprot <- prot.ab[prot.ab$Sample%in%int3,]
+xgene <- gene.exp2[gene.exp2$Sample %in% int3, ]
+
+sel1 <- which(xclin$BRCA != "Positive")
+sel2 <- which(xclin$BRCA != "Negative")
+sel <- intersect(sel1,sel2) # Find values of BRCA that are not negative or positive. 
+# In this case these values are either "Indeterminate" or "Not Performed".
+xclin <- xclin[-sel,] # Remove the rows with non-valid data for BRCA. 
+xclin <- xclin[-which(is.na(xclin$BRCA)),] # Also remove rows with missing data for BRCA. 
+
+# Join the (cleaned) clinical data and the gene expression data on "Sample".
+mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
+```
+
+Note that the copy number data has no missing values, which means that we do not need to remove any data. 
+
+From now on we only use the gene expression data. 
+
+The 25% percent of genes with the most variability are chosen. 
+
+```{r}
+percentage <- round(dim(mgene[,-c(1,2)])[[2]]*0.25) # Find how many variables correspond to 25%. 
+variances <- apply(X=mgene[,-c(1,2)], MARGIN=2, FUN=var) # Find empirical variance in each of the variables (genes).
+sorted <- sort(variances, decreasing=TRUE, index.return=TRUE)$ix[1:percentage] # Sort from highest to lowest variance and select the top 25% indices. 
+mgene.lvar <- mgene[, c(1,2,sorted)] # Select the 25% largest variance variables using the indices found above. 
+```
+
+The selected `r percentage` genes are used to implement a stacked autoencoder (SAE) with three stacked layers of 1000, 100 and 50 nodes. 
+
+## Final Training/Test Split
+
+```{r}
+set.seed(111)
+training.fraction <- 0.7 # 70 % of data will be used for training. 
+training <- sample(1:nrow(mgene.lvar),nrow(mgene.lvar)*training.fraction) 
+
+xtrain <- mgene.lvar[training,-c(1,2)]
+xtest <- mgene.lvar[-training,-c(1,2)]
+
+# Scaling for better numerical stability. 
+xtrain <- scale(data.matrix(xtrain)) 
+xtest <- scale(data.matrix(xtest))
+
+# Pick out labels for train and test set. 
+ytrain <- mgene.lvar[training,2]
+ytest <- mgene.lvar[-training,2]
+
+# Change labels to numerical values in train and test set. 
+ylabels <- c()
+ylabels[ytrain=="Positive"] <- 1
+ylabels[ytrain=="Negative"] <- 0
+
+
+ytestlabels <- c()
+ytestlabels[ytest=="Positive"] <- 1
+ytestlabels[ytest=="Negative"] <- 0
+```
+
+
+# Implementation of SAE
+
+## First Layer (1000 nodes)
+```{r}
+# Develop the encoder. 
+input_enc1 <- layer_input(shape = percentage)
+output_enc1 <- input_enc1 %>% 
+  layer_dense(units=1000,activation="relu") 
+encoder1 <- keras_model(input_enc1, output_enc1)
+summary(encoder1)
+
+# Develop the decoder. 
+input_dec1 <- layer_input(shape = 1000)
+output_dec1 <- input_dec1 %>% 
+  layer_dense(units = percentage, activation="linear")
+decoder1 <- keras_model(input_dec1, output_dec1)
+summary(decoder1)
+
+# Develop the first AE.
+aen_input1 <- layer_input(shape = percentage)
+aen_output1 <- aen_input1 %>% 
+  encoder1() %>% 
+  decoder1()
+sae1 <- keras_model(aen_input1, aen_output1)
+summary(sae1)
+```
+
+Evidence of the quality of the coding obtained follows. WHAT KIND OF EVIDENCE CAN THIS BE?
+
+```{r comp}
+sae1 %>% compile(
+  optimizer = "rmsprop",
+  loss = "mse"
+)
+```
+
+```{r fit}
+sae1 %>% fit(
+  x = as.matrix(xtrain),
+  y = as.matrix(xtrain),
+  epochs = 25,
+  batch_size = 64,
+  validation_split = 0.2
+)
+```
+
+```{r}
+encoded_expression1 <- encoder1 %>% predict(as.matrix(xtrain)) 
+```
+
+
+## Second Layer (100 nodes)
+```{r}
+# Develop the encoder. 
+input_enc2 <- layer_input(shape = 1000)
+output_enc2 <- input_enc2 %>% 
+  layer_dense(units=100,activation="relu") 
+encoder2 <- keras_model(input_enc2, output_enc2)
+summary(encoder2)
+
+# Develop the decoder. 
+input_dec2 <- layer_input(shape = 100)
+output_dec2 <- input_dec2 %>% 
+  layer_dense(units = 1000, activation="linear")
+decoder2 <- keras_model(input_dec2, output_dec2)
+summary(decoder2)
+
+# Develop the first AE.
+aen_input2 <- layer_input(shape = 1000)
+aen_output2 <- aen_input2 %>% 
+  encoder2() %>% 
+  decoder2()
+sae2 <- keras_model(aen_input2, aen_output2)
+summary(sae2)
+
+# Evidence of quality of coding obtained. 
+```
+
+## Third Layer (50 nodes)
+```{r}
+# Develop the encoder. 
+input_enc3 <- layer_input(shape = 100)
+output_enc3 <- input_enc3 %>% 
+  layer_dense(units=50,activation="relu") 
+encoder3 <- keras_model(input_enc3, output_enc3)
+summary(encoder3)
+
+# Develop the decoder. 
+input_dec3 <- layer_input(shape = 50)
+output_dec3 <- input_dec3 %>% 
+  layer_dense(units = 100, activation="linear")
+decoder3 <- keras_model(input_dec3, output_dec3)
+summary(decoder3)
+
+# Develop the first AE.
+aen_input3 <- layer_input(shape = 100)
+aen_output3 <- aen_input3 %>% 
+  encoder3() %>% 
+  decoder3()
+sae3 <- keras_model(aen_input3, aen_output3)
+summary(sae3)
+```
+
+## Final Model (SAE)
+
+```{r}
+sae_input <- layer_input(shape = percentage)
+sae_output <- sae_input %>% 
+  encoder1() %>% 
+  encoder2() %>%
+  encoder3() %>%
+  layer_dense(10,activation = "relu") %>% # Already coupled with the DNN.
+  layer_dense(1,activation = "sigmoid")
+   
+sae <- keras_model(sae_input, sae_output)
+summary(sae)
+```
+
+# SAE as Pre-Training Model for Prediction of Estrogen Receptor State
+
+```{r}
+freeze_weights(sae,from=1,to=3) # Freeze the weights (pre-training using the SAE).
+```
+

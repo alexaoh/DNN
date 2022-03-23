@@ -12,4 +12,5 @@ dependencies:
  - r-shiny
  - r-rmarkdown
  - markdown
+ - r-mixomics
 
