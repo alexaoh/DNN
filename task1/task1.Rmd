@@ -14,17 +14,18 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, comment = "#>", cache = T)
+knitr::opts_chunk$set(echo = TRUE, comment = "#>")
 library(keras)
 library(readr)
 library(pROC)
 library(tidyverse)
 library(caret)
+library(ggplot2)
 ```
 
 # Protein Abundance and Gene Expression Datasets
 
-```{r}
+```{r, cache = T}
 gene.exp <- read_delim("gene_expression.csv", "\t", escape_double = FALSE, trim_ws = TRUE)
 prot.ab <- read_delim("protein_abundance.csv", "\t", escape_double = FALSE, trim_ws = TRUE)
 clinical <- read_delim("clinical.csv","\t", escape_double = FALSE, trim_ws = TRUE)
@@ -69,18 +70,25 @@ int1 <- intersect(gene.exp$Sample, prot.ab$Sample)
 length(int1)
 int2 <- intersect(gene.exp2$Sample, prot.ab$Sample)
 length(int2)
-int3 <- intersect(int2, clinical$Sample)
+int3 <- intersect(int2, clinical$Sample) # Dette kan kanskje gjøres etter "massasjen" jeg gjør lenger nede!?
 length(int3)
+
+# Kanskje dataen nedenfor kan brukes i stedet? Dvs, vi bryr oss ikke om personer som har gene.exp data, men ikke har prot.ab data? Se hva de krever lenger nede!
+int4 <- intersect(gene.exp2$Sample, clinical$Sample)
+length(int4)
+
+# Usikker på hva slags data vi skal bruke!
 ```
 
-From the code above we can see that `r length(int1)` of the patients' sample codes exist in the protein abundance and the gene expression datasets, before removing the rows with missing values from the gene expression data. This is not interesting to us however, since we are only interested in individuals who don't have missing gene expression data. After removing the missing values from the gene expression data, the number of patients that have data available for both gene expression and protein abundance is `r length(int2)`. Moreover, `r length(int2)` of the patients' sample codes exist in all three datasets, when the `clinical` dataset is included and all missing values are removed. This means that this amount of patients have data of both types available. But do all these individuals have data concerning their breast invasive carcinoma (BRCA) estrogen receptor status? Next, we remove all the individuals that don't have this information. 
+From the code above we can see that `r length(int1)` of the patients' sample codes exist in the protein abundance and the gene expression datasets, before removing the rows with missing values from the gene expression data. This is not interesting to us however, since we are only interested in individuals who don't have missing gene expression data. After removing the missing values from the gene expression data, the number of patients that have data available for both gene expression and protein abundance is `r length(int2)`. Moreover, `r length(int3)` of the patients' sample codes exist in all three datasets, when the `clinical` dataset is included (without considering missing values in the `clinical` data. This is done next). This means that this amount of patients have data of both types available. But do all these individuals have data concerning their breast invasive carcinoma (BRCA) estrogen receptor status? Next, we remove all the individuals that don't have this information. 
 
 ```{r}
+chosen.data <- int3 # Change this definition after deciding which data set to use!
 xclin <- clinical[,c(1,9)]
 colnames(xclin) <- c("Sample", "BRCA")
-xclin <- xclin[clinical$Sample %in% int3, ]
-#xprot <- prot.ab[prot.ab$Sample%in%int3,]
-xgene <- gene.exp2[gene.exp2$Sample %in% int3, ]
+xclin <- xclin[clinical$Sample %in% chosen.data, ] 
+#xprot <- prot.ab[prot.ab$Sample%in%chosen.data,]
+xgene <- gene.exp2[gene.exp2$Sample %in% chosen.data, ]
 
 sel1 <- which(xclin$BRCA != "Positive")
 sel2 <- which(xclin$BRCA != "Negative")
@@ -119,6 +127,7 @@ xtrain <- mgene.lvar[training,-c(1,2)]
 xtest <- mgene.lvar[-training,-c(1,2)]
 
 # Scaling for better numerical stability. 
+# This is a standard "subtract mean and divide by standard deviation" scaling. 
 xtrain <- scale(data.matrix(xtrain)) 
 xtest <- scale(data.matrix(xtest))
 
@@ -130,7 +139,6 @@ ytest <- mgene.lvar[-training,2]
 ylabels <- c()
 ylabels[ytrain=="Positive"] <- 1
 ylabels[ytrain=="Negative"] <- 0
-
 
 ytestlabels <- c()
 ytestlabels[ytest=="Positive"] <- 1
@@ -165,7 +173,7 @@ sae1 <- keras_model(aen_input1, aen_output1)
 summary(sae1)
 ```
 
-Evidence of the quality of the coding obtained follows. WHAT KIND OF EVIDENCE CAN THIS BE?
+We compile the model and fit it to the training data. 
 
 ```{r comp}
 sae1 %>% compile(
@@ -176,18 +184,41 @@ sae1 %>% compile(
 
 ```{r fit}
 sae1 %>% fit(
-  x = as.matrix(xtrain),
-  y = as.matrix(xtrain),
+  x = xtrain,
+  y = xtrain,
   epochs = 25,
   batch_size = 64,
   validation_split = 0.2
 )
 ```
 
+We make predictions on the training data. 
+
 ```{r}
-encoded_expression1 <- encoder1 %>% predict(as.matrix(xtrain)) 
+encoded_expression1 <- encoder1 %>% predict(xtrain) 
+decoded_expression1 <- decoder1 %>% predict(encoded_expression1)
+
+# This method gives the same predictions as the two lines above. 
+# i.e. the values in decoded_expression above are the same as the values in x.hat below. 
+x.hat <- predict(sae1,xtrain)
 ```
 
+Some (weak) evidence of the quality of the coding obtained follows. We plot the correlation between the predictions from the autoencoder and the correct data, both on the train and test sets. The results are shown below. 
+
+```{r}
+vcor <- diag(cor(x.hat,xtrain))
+hist(vcor, main = "Correlation on Training Data")
+```
+
+The histogram above shows that the correlation between the training data and the predictions from the first autoencoder are relatively high. We do the same check on the test set. 
+
+```{r}
+x.hat <- predict(sae1,xtest)
+vcor <- diag(cor(x.hat,xtest))
+hist(vcor, main = "Correlation on Testing Data")
+```
+
+As expected, the correlation is lower on the test data, but there still is some correlation. 
 
 ## Second Layer (100 nodes)
 ```{r}
@@ -205,16 +236,53 @@ output_dec2 <- input_dec2 %>%
 decoder2 <- keras_model(input_dec2, output_dec2)
 summary(decoder2)
 
-# Develop the first AE.
+# Develop the second AE.
 aen_input2 <- layer_input(shape = 1000)
 aen_output2 <- aen_input2 %>% 
   encoder2() %>% 
   decoder2()
 sae2 <- keras_model(aen_input2, aen_output2)
 summary(sae2)
-
-# Evidence of quality of coding obtained. 
 ```
+
+We compile the model and fit it to the training data. 
+
+```{r}
+sae2 %>% compile(
+  optimizer = "rmsprop",
+  loss = "mse"
+)
+```
+
+```{r}
+sae2 %>% fit(
+  x = encoded_expression1,
+  y = encoded_expression1,
+  epochs = 25,
+  batch_size = 64,
+  validation_split = 0.2
+)
+```
+
+We make predictions on the training data, which in this case is the training data reduced in dimension from the first autoencoder.  
+
+```{r}
+encoded_expression2 <- encoder2 %>% predict(encoded_expression1) 
+decoded_expression2 <- decoder2 %>% predict(encoded_expression2)
+
+# This method gives the same predictions as the two lines above. 
+# i.e. the values in decoded_expression above are the same as the values in x.hat below. 
+x.hat <- predict(sae2,encoded_expression1)
+```
+
+Some (weak) evidence of the quality of the coding obtained follows. Now we plot the correlation between the predictions from the autoencoder and the input data, which in this case is the encoded data from the first autoencoder (the latent variables/space). 
+
+```{r}
+vcor <- diag(cor(x.hat,encoded_expression1))
+hist(vcor, main = "Correlation with Input Data (Encoded from sae1)")
+```
+
+The histogram above shows that there is correlation between the input and the predictions from the second autoencoder. Note that we do not have a test set in this case, since the dimension of the output data from sae2 is 1000, which is less than the amount of features in the test data. 
 
 ## Third Layer (50 nodes)
 ```{r}
@@ -232,7 +300,7 @@ output_dec3 <- input_dec3 %>%
 decoder3 <- keras_model(input_dec3, output_dec3)
 summary(decoder3)
 
-# Develop the first AE.
+# Develop the third AE.
 aen_input3 <- layer_input(shape = 100)
 aen_output3 <- aen_input3 %>% 
   encoder3() %>% 
@@ -241,16 +309,55 @@ sae3 <- keras_model(aen_input3, aen_output3)
 summary(sae3)
 ```
 
+We compile the model and fit it to the training data. 
+
+```{r}
+sae3 %>% compile(
+  optimizer = "rmsprop",
+  loss = "mse"
+)
+```
+
+```{r}
+sae3 %>% fit(
+  x = encoded_expression2,
+  y = encoded_expression2,
+  epochs = 25,
+  batch_size = 64,
+  validation_split = 0.2
+)
+```
+
+We make predictions on the training data, which in this case is the training data reduced in dimension from the first autoencoder.  
+
+```{r}
+encoded_expression3 <- encoder3 %>% predict(encoded_expression2) 
+decoded_expression3 <- decoder3 %>% predict(encoded_expression3)
+
+# This method gives the same predictions as the two lines above. 
+# i.e. the values in decoded_expression above are the same as the values in x.hat below. 
+x.hat <- predict(sae3,encoded_expression2)
+```
+
+Some (weak) evidence of the quality of the coding obtained follows. Now we plot the correlation between the predictions from the autoencoder and the input data, which in this case is the encoded data from the first autoencoder (the latent variables/space). 
+
+```{r}
+vcor <- diag(cor(x.hat,encoded_expression2))
+hist(vcor, main = "Correlation with Input Data (Encoded from sae2)")
+```
+
+The histogram above shows that there is some correlation between the input and the predictions from the second autoencoder. Notice that the correlation is less than earlier though. Also note that we do not have a test set in this case, since the dimension of the output data from sae3 is 100, which is less than the amount of features in the test data. 
+
 ## Final Model (SAE)
+
+The final stacked autoencoder (SAE) is constructed below. All the encoders are stacked previously trained are stacked together. 
 
 ```{r}
 sae_input <- layer_input(shape = percentage)
 sae_output <- sae_input %>% 
   encoder1() %>% 
   encoder2() %>%
-  encoder3() %>%
-  layer_dense(10,activation = "relu") %>% # Already coupled with the DNN.
-  layer_dense(1,activation = "sigmoid")
+  encoder3()
    
 sae <- keras_model(sae_input, sae_output)
 summary(sae)
@@ -258,7 +365,73 @@ summary(sae)
 
 # SAE as Pre-Training Model for Prediction of Estrogen Receptor State
 
+The SAE is used as a pre-training model for prediction of the estrogen receptor state. The DNN has 10 nodes in the first layer, followed by one output node. The weights are frozen for the first 3 functional layers, which means that only the weights from the third autoencoder to the first fully connected layer and from the first layer in the DNN to the output layer (in total 521 weights) are to be fine-tuned to obtain the final classifier. 
+
 ```{r}
-freeze_weights(sae,from=1,to=3) # Freeze the weights (pre-training using the SAE).
+sae_output2 <- sae_output %>%
+  layer_dense(10,activation = "relu") %>% # Couple with fully connected layers (DNN).
+  layer_dense(1,activation = "sigmoid")
+
+sae <- keras_model(sae_input, sae_output2)
+summary(sae)
+
+freeze_weights(sae,from=1,to=4) # Freeze the weights (pre-training using the SAE).
+summary(sae)
+```
+
+We compile and fit the final classifier. 
+
+```{r}
+sae %>% compile(
+  optimizer = "rmsprop",
+  loss = 'binary_crossentropy',
+  metric = "acc"
+)
+```
+
+  
+```{r}
+sae %>% fit(
+  x=xtrain,
+  y=ylabels,
+  epochs = 30,
+  batch_size=64,
+  validation_split = 0.2
+)
+```
+
+# Performance Metrics
+
+The model is evaluated on the test set below.  
+
+```{r}
+sae %>%
+  evaluate(xtest, ytestlabels)
+```
+
+Predictions on the test set are calculated. The classifier is built on the assumption that predictions of probability smaller than $0.5$ are negative receptor states, while probabilities larger than $0.5$ are positive receptor states. The confusion matrix of the predictions is shown below. 
+
+```{r}
+yhat <- predict(sae,xtest)
+yhatclass<-as.factor(ifelse(yhat<0.5,0,1))
+confusionMatrix(yhatclass,as.factor(ytestlabels))
+```
+
+The ROC curve is shown below. 
+
+```{r}
+roc_sae_test <- roc(response = ytestlabels, predictor = as.numeric(yhat))
+plot(roc_sae_test, col = "blue", print.auc=TRUE)
+legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
+```
+
+As is seen above, the AUC is `r round(roc_sae_test$auc, 2)`. 
+
+# Use `tfruns()` to Explore Configurations of First Fully Connected Layer
+
+The code used in `tfruns` is given below. 
+
+```{r}
+
 ```
 
