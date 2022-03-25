@@ -103,6 +103,8 @@ mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
 
 Note that the copy number data has no missing values, which means that we do not need to remove any data. 
 
+## Gene Expression Data
+
 From now on we only use the **gene expression data**. 
 
 The 25% percent of genes with the most variability are chosen. 
@@ -361,7 +363,7 @@ The histogram above shows that there is some correlation between the input and t
 The final stacked autoencoder (SAE) is constructed below. All the encoders are stacked previously trained are stacked together. 
 
 ```{r}
-sae_input <- layer_input(shape = percentage)
+sae_input <- layer_input(shape = percentage, name = "gene.mod")
 sae_output <- sae_input %>% 
   encoder1() %>% 
   encoder2() %>%
@@ -444,6 +446,49 @@ As is seen above, the AUC is `r round(roc_sae_test$auc, 2)`. COMMENTS / INTERPRE
 
 The code used with `tfruns` is given in separate R files. Anyhow, the exploration of the first layer of the DNN containing 5, 10 or 20 nodes leads to the conclusion that the configuration with 20 nodes gives the best results. CHECK THIS AGAIN LATER!
 
+Thus, the final model is
+
+```{r}
+sae_output2 <- sae_output %>%
+  layer_dense(20,activation = "relu") %>% # Couple with fully connected layers (DNN).
+  layer_dense(1,activation = "sigmoid")
+
+sae <- keras_model(sae_input, sae_output2)
+summary(sae)
+
+freeze_weights(sae,from=1,to=4) # Freeze the weights (pre-training using the SAE).
+summary(sae)
+
+sae %>% compile(
+  optimizer = "rmsprop",
+  loss = 'binary_crossentropy',
+  metric = "acc"
+)
+
+sae %>% fit(
+  x=xtrain,
+  y=ylabels,
+  epochs = 30,
+  batch_size=64,
+  validation_split = 0.2
+)
+
+sae %>%
+  evaluate(xtest, ytestlabels)
+
+yhat <- predict(sae,xtest)
+yhatclass<-as.factor(ifelse(yhat<0.5,0,1))
+confusionMatrix(yhatclass,as.factor(ytestlabels))
+
+roc_sae_test <- roc(response = ytestlabels, predictor = as.numeric(yhat))
+plot(roc_sae_test, col = "blue", print.auc=TRUE)
+legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
+```
+
+DENNE ER JO DÅRLIGERE. HVORDAN ORDNE OPP IT STOKASTISITET I TFRUNS + HER? HVILKEN VARIANT SOM ER BEST (5, 10 ELLER 20 NODER) VIRKER VELDIG TILFELDIG (OG AVHENGER OGSÅ STERKT AV HVOR MANGE VEKTER SOM FRYSES). I TILLEGG VIRKER DET IKKE SOM AT metric_val_acc ER ET GODT MÅL PÅ HVILKEN MODELL SOM GIR BEST RESULTATER, DA AUC OG ROC I FLERE TILFELLER VISER NOE ANNET. 
+
+## Complete Data 
+
 The **complete data** (gene expression and protein abundance) is split into train and test sets. 
 
 ```{r}
@@ -464,7 +509,7 @@ xclin <- xclin[-which(is.na(xclin$BRCA)),] # Also remove rows with missing data 
 # Join the (cleaned) clinical data and the gene expression data on "Sample".
 mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
 mtot <- merge(mgene, xprot, by.x = "Sample", by.y = "Sample")
-#mtot <- xclin %>% left_join(xgene) %>% left_join(xprot, by = "Sample")
+#mtot <- xclin %>% left_join(xgene) %>% left_join(xprot, by = "Sample") # This gives the same result. 
 
 set.seed(111)
 training.fraction <- 0.7 # 70 % of data will be used for training. 
@@ -492,3 +537,223 @@ ytestlabels[ytest=="Positive"] <- 1
 ytestlabels[ytest=="Negative"] <- 0
 ```
 
+The SAE for the abundance of proteins (from class examples) is added in the code block below. Then, this model is concatenated with the former model, that was trained on the gene expression data. 
+
+KODEN NEDENFOR FUNGERER IKKE AKKURAT NÅ, USIKKER PÅ HVORFOR DEN FAILER. 
+
+```{r, eval = F}
+## ---------------------------------------------------------------------------------
+input_enc1<-layer_input(shape = 142)
+output_enc1<-input_enc1 %>% 
+  layer_dense(units=50,activation="relu") 
+encoder1 = keras_model(input_enc1, output_enc1)
+summary(encoder1)
+
+
+## ---------------------------------------------------------------------------------
+input_dec1 = layer_input(shape = 50)
+output_dec1<-input_dec1 %>% 
+  layer_dense(units=142,activation="linear")
+
+decoder1 = keras_model(input_dec1, output_dec1)
+ 
+summary(decoder1)
+
+
+## ---------------------------------------------------------------------------------
+aen_input1 = layer_input(shape = 142)
+aen_output1 = aen_input1 %>% 
+  encoder1() %>% 
+  decoder1()
+   
+sae1 = keras_model(aen_input1, aen_output1)
+summary(sae1)
+
+
+## ---------------------------------------------------------------------------------
+sae1 %>% compile(
+  optimizer = "rmsprop",
+  loss = "mse"
+)
+
+
+## ---------------------------------------------------------------------------------
+sae1 %>% fit(
+  x=as.matrix(xtrain),
+  y=as.matrix(xtrain),
+  epochs = 25,
+  batch_size=64,
+  validation_split = 0.2
+  )
+
+
+## ---------------------------------------------------------------------------------
+#Generating with Autoencoder
+encoded_expression1 <- encoder1 %>% predict(as.matrix(xtrain))
+
+
+## ---------------------------------------------------------------------------------
+input_enc2<-layer_input(shape = 50)
+output_enc2<-input_enc2 %>% 
+  layer_dense(units=20,activation="relu") 
+encoder2 = keras_model(input_enc2, output_enc2)
+summary(encoder2)
+
+
+## ---------------------------------------------------------------------------------
+input_dec2 = layer_input(shape = 20)
+output_dec2<-input_dec2 %>% 
+  layer_dense(units=50,activation="linear")
+
+decoder2 = keras_model(input_dec2, output_dec2)
+ 
+summary(decoder2)
+
+
+## ---------------------------------------------------------------------------------
+aen_input2 = layer_input(shape = 50)
+aen_output2 = aen_input2 %>% 
+  encoder2() %>% 
+  decoder2()
+   
+sae2 = keras_model(aen_input2, aen_output2)
+summary(sae2)
+
+
+## ---------------------------------------------------------------------------------
+sae2 %>% compile(
+  optimizer = "rmsprop",
+  loss = "mse"
+)
+
+
+## ---------------------------------------------------------------------------------
+sae2 %>% fit(
+  x=as.matrix(encoded_expression1),
+  y=as.matrix(encoded_expression1),
+  epochs = 25,
+  batch_size=64,
+  validation_split = 0.2
+  )
+
+
+## ---------------------------------------------------------------------------------
+#Generating with Autoencoder
+encoded_expression2 <- encoder2 %>% predict(as.matrix(encoded_expression1))
+
+
+## ---------------------------------------------------------------------------------
+input_enc3<-layer_input(shape = 20)
+output_enc3<-input_enc3 %>% 
+  layer_dense(units=10,activation="relu") 
+encoder3 = keras_model(input_enc3, output_enc3)
+summary(encoder3)
+
+
+## ---------------------------------------------------------------------------------
+input_dec3 = layer_input(shape = 10)
+output_dec3<-input_dec3 %>% 
+  layer_dense(units=20,activation="linear")
+
+decoder3 = keras_model(input_dec3, output_dec3)
+ 
+summary(decoder3)
+
+
+## ---------------------------------------------------------------------------------
+aen_input3 = layer_input(shape = 20)
+aen_output3 = aen_input3 %>% 
+  encoder3() %>% 
+  decoder3()
+   
+sae3 = keras_model(aen_input3, aen_output3)
+summary(sae3)
+
+
+## ---------------------------------------------------------------------------------
+sae3 %>% compile(
+  optimizer = "rmsprop",
+  loss = "mse"
+)
+
+
+## ---------------------------------------------------------------------------------
+sae3 %>% fit(
+  x=as.matrix(encoded_expression2),
+  y=as.matrix(encoded_expression2),
+  epochs = 25,
+  batch_size=64,
+  validation_split = 0.2
+  )
+
+
+## ---------------------------------------------------------------------------------
+#Generating with Autoencoder
+encoded_expression3 <- encoder3 %>% predict(as.matrix(encoded_expression2))
+
+sae_input.prot = layer_input(shape = 142, name = "prot.mod")
+sae_output.prot = sae_input %>% 
+  encoder1() %>% 
+  encoder2()  %>%
+  encoder3() %>%
+  layer_dense(20,activation = "relu")%>%
+  layer_dense(1,activation = "sigmoid")
+```
+
+The two models are concatenated below. CHECK THAT THIS IS DONE CORRECTLY LATER!
+SKAL DENSE LAYERS LEGGES TIL I DEN KONKATENERTE MODELLEN ELLER I HVER AV DE TO MODELLENE FØR DE KONKATINERES (SLIK DET ER GJORT NÅ)?
+
+```{r, eval = F}
+concatenated<-layer_concatenate(list(sae_output2,sae_output.prot))
+model_output<-concatenated %>% 
+  layer_dense(units=2,activation = "softmax")
+
+model<-keras_model(list(sae_input,sae_output.prot), model_output)
+summary(model)
+```
+
+The model is compiled and trained below. 
+
+```{r, eval = F}
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "categorical_crossentropy",
+  metrics = "acc"
+)
+
+
+# training 
+
+model %>% fit( # Usikker på om det er rett at begge skal ha den samme dataen!?
+  # Mulig dette blir helt feil dimensjoner!
+  list(gene.mod=xtrain,prot.mod=xtrain), ylabels,
+  epochs = 75, batch_size = 16, validation_split = 0.2
+)
+```
+
+# Performance Metrics
+
+The model is evaluated on the test set below.  
+
+```{r, eval = F}
+model %>%
+  evaluate(xtest, ytestlabels)
+```
+
+<!-- Predictions on the test set are calculated. The classifier is built on the assumption that predictions of probability smaller than $0.5$ are negative receptor states, while probabilities larger than $0.5$ are positive receptor states. The confusion matrix of the predictions is shown below.  -->
+
+```{r, eval = F}
+yhat <- predict(model,xtest)
+yhatclass<-as.factor(ifelse(yhat<0.5,0,1))
+confusionMatrix(yhatclass,as.factor(ytestlabels))
+```
+
+The ROC curve is shown below. 
+
+```{r, eval = F}
+roc_sae_test <- roc(response = ytestlabels, predictor = as.numeric(yhat))
+plot(roc_sae_test, col = "blue", print.auc=TRUE)
+legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
+```
+
+# Discussion
