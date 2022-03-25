@@ -83,7 +83,7 @@ length(int4)
 From the code above we can see that `r length(int1)` of the patients' sample codes exist in the protein abundance and the gene expression datasets, before removing the rows with missing values from the gene expression data. This is not interesting to us however, since we are only interested in individuals who don't have missing gene expression data. After removing the missing values from the gene expression data, the number of patients that have data available for both gene expression and protein abundance is `r length(int2)`. Moreover, `r length(int3)` of the patients' sample codes exist in all three datasets, when the `clinical` dataset is included (without considering missing values in the `clinical` data. This is done next). This means that this amount of patients have data of both types available. But do all these individuals have data concerning their breast invasive carcinoma (BRCA) estrogen receptor status? Next, we remove all the individuals that don't have this information. 
 
 ```{r}
-chosen.data <- int3 # Change this definition after deciding which data set to use!
+chosen.data <- int4 # Change this definition after deciding which data set to use!
 xclin <- clinical[,c(1,9)]
 colnames(xclin) <- c("Sample", "BRCA")
 xclin <- xclin[clinical$Sample %in% chosen.data, ] 
@@ -103,7 +103,7 @@ mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
 
 Note that the copy number data has no missing values, which means that we do not need to remove any data. 
 
-From now on we only use the gene expression data. 
+From now on we only use the **gene expression data**. 
 
 The 25% percent of genes with the most variability are chosen. 
 
@@ -143,7 +143,15 @@ ylabels[ytrain=="Negative"] <- 0
 ytestlabels <- c()
 ytestlabels[ytest=="Positive"] <- 1
 ytestlabels[ytest=="Negative"] <- 0
+
+# The data is saved to a file, so that it can be loaded directly into tfruns() files. 
+data.train <- data.frame(ylabels, xtrain)
+data.test <- data.frame(ytestlabels, xtest)
+write.csv(data.train, "train_for5.csv")
+write.csv(data.test, "test_for5.csv")
 ```
+
+
 
 
 # Implementation of SAE
@@ -361,6 +369,11 @@ sae_output <- sae_input %>%
    
 sae <- keras_model(sae_input, sae_output)
 summary(sae)
+
+# Code below is used for loading model (and model checking) in separate file for tfruns().
+yhat <- predict(sae, xtest)
+write.csv(yhat, file = "predictions.csv")
+save_model_weights_hdf5(sae, "sae.hdf5")
 ```
 
 # SAE as Pre-Training Model for Prediction of Estrogen Receptor State
@@ -425,13 +438,57 @@ plot(roc_sae_test, col = "blue", print.auc=TRUE)
 legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
 ```
 
-As is seen above, the AUC is `r round(roc_sae_test$auc, 2)`. 
+As is seen above, the AUC is `r round(roc_sae_test$auc, 2)`. COMMENTS / INTERPRETATIONS!
 
 # Use `tfruns()` to Explore Configurations of First Fully Connected Layer
 
-The code used in `tfruns` is given below. 
+The code used with `tfruns` is given in separate R files. Anyhow, the exploration of the first layer of the DNN containing 5, 10 or 20 nodes leads to the conclusion that the configuration with 20 nodes gives the best results. CHECK THIS AGAIN LATER!
+
+The **complete data** (gene expression and protein abundance) is split into train and test sets. 
 
 ```{r}
+chosen.data <- int3 # Change this definition after deciding which data set to use!
+xclin <- clinical[,c(1,9)]
+colnames(xclin) <- c("Sample", "BRCA")
+xclin <- xclin[clinical$Sample %in% chosen.data, ] 
+xprot <- prot.ab[prot.ab$Sample%in%chosen.data,]
+xgene <- gene.exp2[gene.exp2$Sample %in% chosen.data, ]
 
+sel1 <- which(xclin$BRCA != "Positive")
+sel2 <- which(xclin$BRCA != "Negative")
+sel <- intersect(sel1,sel2) # Find values of BRCA that are not negative or positive. 
+# In this case these values are either "Indeterminate" or "Not Performed".
+xclin <- xclin[-sel,] # Remove the rows with non-valid data for BRCA. 
+xclin <- xclin[-which(is.na(xclin$BRCA)),] # Also remove rows with missing data for BRCA. 
+
+# Join the (cleaned) clinical data and the gene expression data on "Sample".
+mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
+mtot <- merge(mgene, xprot, by.x = "Sample", by.y = "Sample")
+#mtot <- xclin %>% left_join(xgene) %>% left_join(xprot, by = "Sample")
+
+set.seed(111)
+training.fraction <- 0.7 # 70 % of data will be used for training. 
+training <- sample(1:nrow(mtot),nrow(mtot)*training.fraction) 
+
+xtrain <- mtot[training,-c(1,2)]
+xtest <- mtot[-training,-c(1,2)]
+
+# Scaling for better numerical stability. 
+# This is a standard "subtract mean and divide by standard deviation" scaling. 
+xtrain <- scale(data.matrix(xtrain)) 
+xtest <- scale(data.matrix(xtest))
+
+# Pick out labels for train and test set. 
+ytrain <- mgene.lvar[training,2]
+ytest <- mgene.lvar[-training,2]
+
+# Change labels to numerical values in train and test set. 
+ylabels <- c()
+ylabels[ytrain=="Positive"] <- 1
+ylabels[ytrain=="Negative"] <- 0
+
+ytestlabels <- c()
+ytestlabels[ytest=="Positive"] <- 1
+ytestlabels[ytest=="Negative"] <- 0
 ```
 
