@@ -1,9 +1,6 @@
-
 library(keras)
 library(mixOmics)
-#
-#
-#
+
 
 data(nutrimouse)
 matrix1<-as.matrix(nutrimouse$gene)

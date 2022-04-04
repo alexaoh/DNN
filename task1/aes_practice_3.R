@@ -199,19 +199,19 @@ aen_output1 = aen_input1 %>%
   encoder1() %>% 
   decoder1()
 
-sae1 = keras_model(aen_input1, aen_output1)
-summary(sae1)
+sae_protab1 = keras_model(aen_input1, aen_output1)
+summary(sae_protab1)
 
 
 ## ---------------------------------------------------------------------------------
-sae1 %>% compile(
+sae_protab1 %>% compile(
   optimizer = "rmsprop",
   loss = "mse"
 )
 
 
 ## ---------------------------------------------------------------------------------
-sae1 %>% fit(
+sae_protab1 %>% fit(
   x=as.matrix(xtrain),
   y=as.matrix(xtrain),
   epochs = 25,
@@ -249,19 +249,19 @@ aen_output2 = aen_input2 %>%
   encoder2() %>% 
   decoder2()
 
-sae2 = keras_model(aen_input2, aen_output2)
-summary(sae2)
+sae_protab2 = keras_model(aen_input2, aen_output2)
+summary(sae_protab2)
 
 
 ## ---------------------------------------------------------------------------------
-sae2 %>% compile(
+sae_protab2 %>% compile(
   optimizer = "rmsprop",
   loss = "mse"
 )
 
 
 ## ---------------------------------------------------------------------------------
-sae2 %>% fit(
+sae_protab2 %>% fit(
   x=as.matrix(encoded_expression1),
   y=as.matrix(encoded_expression1),
   epochs = 25,
@@ -299,19 +299,19 @@ aen_output3 = aen_input3 %>%
   encoder3() %>% 
   decoder3()
 
-sae3 = keras_model(aen_input3, aen_output3)
-summary(sae3)
+sae_protab3 = keras_model(aen_input3, aen_output3)
+summary(sae_protab3)
 
 
 ## ---------------------------------------------------------------------------------
-sae3 %>% compile(
+sae_protab3 %>% compile(
   optimizer = "rmsprop",
   loss = "mse"
 )
 
 
 ## ---------------------------------------------------------------------------------
-sae3 %>% fit(
+sae_protab3 %>% fit(
   x=as.matrix(encoded_expression2),
   y=as.matrix(encoded_expression2),
   epochs = 25,
@@ -326,28 +326,28 @@ encoded_expression3 <- encoder3 %>% predict(as.matrix(encoded_expression2))
 
 
 ## ---------------------------------------------------------------------------------
-sae_input = layer_input(shape = 142)
-sae_output = sae_input %>% 
+sae_protab_input = layer_input(shape = 142, name = "prot.mod")
+sae_protab_output = sae_protab_input %>% 
   encoder1() %>% 
   encoder2()  %>%
   encoder3() %>%
   layer_dense(5,activation = "relu")%>%
   layer_dense(1,activation = "sigmoid")
 
-sae = keras_model(sae_input, sae_output)
-summary(sae)
+sae_protab = keras_model(sae_protab_input, sae_protab_output)
+summary(sae_protab)
 
 
 ## ---------------------------------------------------------------------------------
-freeze_weights(sae,from=1,to=3)
+freeze_weights(sae_protab,from=1,to=3)
 
 
 ## ---------------------------------------------------------------------------------
-summary(sae)
+summary(sae_protab)
 
 
 ## ---------------------------------------------------------------------------------
-sae %>% compile(
+sae_protab %>% compile(
   optimizer = "rmsprop",
   loss = 'binary_crossentropy',
   metric = "acc"
@@ -355,7 +355,7 @@ sae %>% compile(
 
 
 ## ---------------------------------------------------------------------------------
-sae %>% fit(
+sae_protab %>% fit(
   x=xtrain,
   y=ylabels,
   epochs = 30,
@@ -365,12 +365,12 @@ sae %>% fit(
 
 
 ## ---------------------------------------------------------------------------------
-sae %>%
+sae_protab %>%
   evaluate(as.matrix(xtest), ytestlabels)
 
 
 ## ---------------------------------------------------------------------------------
-yhat <- predict(sae,as.matrix(xtest))
+yhat <- predict(sae_protab,as.matrix(xtest))
 
 
 ## ---------------------------------------------------------------------------------
@@ -383,6 +383,6 @@ confusionMatrix(yhatclass,as.factor(ytestlabels))
 
 
 ## ---------------------------------------------------------------------------------
-roc_sae_test <- roc(response = ytestlabels, predictor =yhat)
-plot(roc_sae_test, col = "blue", print.auc=TRUE)
-legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
+roc_sae_protab_test <- roc(response = ytestlabels, predictor =yhat)
+plot(roc_sae_protab_test, col = "blue", print.auc=TRUE)
+legend("bottomright", legend = c("sae_protab"), lty = c(1), col = c("blue"))

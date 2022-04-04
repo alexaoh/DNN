@@ -1,7 +1,7 @@
 ---
 title: "Task1"
 subtitle: "Statistical Learning with Deep Artificial Neural Networks"
-author: "Alexander J Ohrt"
+author: "Alexander J Ohrt, Liv Breivik, Hannes Johansson"
 date: "`r format(Sys.time(), '%d. %b. %Y')`"
 output: 
    html_document:
@@ -21,6 +21,8 @@ library(pROC)
 library(tidyverse)
 library(caret)
 library(ggplot2)
+
+gc()
 ```
 
 # Protein Abundance and Gene Expression Datasets
@@ -504,7 +506,7 @@ From the ROC curve we see that the AUC-score now is closer to 1, indicating that
 
 DENNE ER JO DÅRLIGERE. HVORDAN ORDNE OPP IT STOKASTISITET I TFRUNS + HER? HVILKEN VARIANT SOM ER BEST (5, 10 ELLER 20 NODER) VIRKER VELDIG TILFELDIG (OG AVHENGER OGSÅ STERKT AV HVOR MANGE VEKTER SOM FRYSES). I TILLEGG VIRKER DET IKKE SOM AT metric_val_acc ER ET GODT MÅL PÅ HVILKEN MODELL SOM GIR BEST RESULTATER, DA AUC OG ROC I FLERE TILFELLER VISER NOE ANNET. 
 
-??? Liv her, AUC nærmere 1 betyr jo at den er bedre?
+??? Liv her, AUC nærmere 1 betyr jo at den er bedre? ... må huske å seede kanskje btw
 
 ### 7. Split the set of patients with complete data (gene expression and protein abundance) in train and test sets.
 
@@ -559,6 +561,15 @@ ytestlabels[ytest=="Positive"] <- 1
 ytestlabels[ytest=="Negative"] <- 0
 ```
 
+```{r}
+xprot_train <- xprot[training,-c(1,2)]
+xgene_train <- xgene[training,-c(1,2)]
+xprot_test <- xprot[-training,-c(1,2)]
+xgene_test <- xgene[-training,-c(1,2)]
+
+ytrain_bin <- to_categorical(as.array(ylabels), 2)
+```
+
 The SAE for the abundance of proteins (from class examples) is added in the code block below. Then, this model is concatenated with the former model, that was trained on the gene expression data. 
 
 ## Importing the SAE from the class example.
@@ -566,17 +577,51 @@ The SAE for the abundance of proteins (from class examples) is added in the code
 How I understood it: in the file aes_practice_3.R there is a SAE model that we can use for the breast stuff. We need to import this model and concatenate it with the one we created for gene expression.
 
 ```{r}
-
-
-
+#Things gathered from the file given in class
+source("aes_practice_3.R")
 ```
 
 
 ### 8. Concatenate the two SAEs to fit, on the trainset, a DNN that integrates both data sources to predict estrogen receptor status. The DNN must have a dense layer (with the better number of nodes according with point 6) and the output layer.
 
+Har antatt at vi skal konkatinere med 2 units, vet ikke om dette stemmer
+
+```{r}
+concatenated<-layer_concatenate(list(sae_output2,sae_protab_output))
+model_output<-concatenated %>% 
+#  layer_dense(10,"relu") %>% 
+  layer_dense(units=2,activation = "softmax")# %>%
+#  layer_dense(units=1,activation="sigmoid")
+
+model<-keras_model(list(sae_input,sae_protab_input), model_output)
+summary(model)
+```
+
+
+```{r}
+
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "categorical_crossentropy",
+  metrics = "acc"
+)
+
+# training 
+#Den her funker ikke. Jeg tror det er fordi xgene_train har 17000 ish kolonner. Den burde egentlig ha typ 4454 eller noe liknende. Må se litt på datarensing. (kan også hende jeg har gjort ting helt feil i tillegg)
+model %>% fit(
+  list(gene.mod=xgene_train, prot.mod=xprot_train), as.array(ylabels),
+  epochs = 75, batch_size = 16, validation_split = 0.2
+)
+
+```
+
+
 KODEN NEDENFOR FUNGERER IKKE AKKURAT NÅ, USIKKER PÅ HVORFOR DEN FAILER. 
 
 Liv her: jeg tror den failer pga denne SAE skal kun brukes på protein abundance greia. Egt ville det beste vært om vi kunne eksportert modellen fra scriptet til læreren, siden det er nøyaktig det vi skal bruke. Hvis ikke burde vi ikke definere xtrain som noe nytt.
+
+
+^Gjort ovenfor. Koden nedenfor kan slettes, men jeg har ikke lyst til å slette andre sitt arbeid. (Vi sitter nå med modellene sae og sae_protab)
 
 ```{r, eval = F}
 ## ---------------------------------------------------------------------------------
@@ -741,6 +786,9 @@ sae_output.prot = sae_input %>%
 
 The two models are concatenated below. CHECK THAT THIS IS DONE CORRECTLY LATER!
 SKAL DENSE LAYERS LEGGES TIL I DEN KONKATENERTE MODELLEN ELLER I HVER AV DE TO MODELLENE FØR DE KONKATINERES (SLIK DET ER GJORT NÅ)?
+
+
+
 
 ```{r, eval = F}
 concatenated<-layer_concatenate(list(sae_output2,sae_output.prot))
