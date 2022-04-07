@@ -23,6 +23,7 @@ library(caret)
 library(ggplot2)
 
 gc()
+set.seed(111)
 ```
 
 # Protein Abundance and Gene Expression Datasets
@@ -88,9 +89,11 @@ length(int4)
 # Hannes: Jag tolkar det också som att vi enbart ska fokusera på gene expression i delfrågorna 2-6. De ber ju oss att göra en ny uppdelning av patienter med både full data (gene expression och protein abundance) i deluppgift 7. Alltså tror jag på att använda set int4 som chosen.data.
 ```
 
-From the code above we can see that `r length(int1)` of the patients' sample codes exist in the protein abundance and the gene expression datasets, before removing the rows with missing values from the gene expression data. This is not interesting to us however, since we are only interested in individuals who don't have missing gene expression data. After removing the missing values from the gene expression data, the number of patients that have data available for both gene expression and protein abundance is `r length(int2)`. Moreover, `r length(int3)` of the patients' sample codes exist in all three datasets, when the `clinical` dataset is included (without considering missing values in the `clinical` data. This is done next). This means that this amount of patients have data of both types available. But do all these individuals have data concerning their breast invasive carcinoma (BRCA) estrogen receptor status? Next, we remove all the individuals that don't have this information. 
+From the code above we can see that `r length(int1)` of the patients' sample codes exist in both the protein abundance and the gene expression datasets, before removing the rows with missing values from the gene expression data. This is not interesting to us however, since we are only interested in individuals who don't have missing gene expression data. After removing the missing values from the gene expression data, the number of patients that have data available for both gene expression and protein abundance is `r length(int2)`. Moreover, `r length(int3)` of the patients' sample codes exist in all three datasets, when the `clinical` dataset is included (without considering missing values in the `clinical` data. This is done next). This means that this amount of patients have data of both types available. But do all these individuals have data concerning their breast invasive carcinoma (BRCA) estrogen receptor status? Next, we remove all the individuals that don't have this information. 
 
 ```{r}
+# TODO (decide): Om vi väljer int4 som chosen.data behöver vi kanske skriv om lite av texten ovan. Nu låter det som att vi tar bort patienter som inte har positiv/negativ ur int3.
+
 chosen.data <- int4 # Change this definition after deciding which data set to use!
 xclin <- clinical[,c(1,9)]
 colnames(xclin) <- c("Sample", "BRCA")
