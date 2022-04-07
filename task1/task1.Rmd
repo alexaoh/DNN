@@ -1,7 +1,7 @@
 ---
 title: "Task1"
 subtitle: "Statistical Learning with Deep Artificial Neural Networks"
-author: "Alexander J Ohrt, Liv Breivik, Hannes Johansson"
+author: "Liv Breivik, Hannes Johansson, Alexander J Ohrt"
 date: "`r format(Sys.time(), '%d. %b. %Y')`"
 output: 
    html_document:
@@ -34,7 +34,6 @@ prot.ab <- read_delim("protein_abundance.csv", "\t", escape_double = FALSE, trim
 clinical <- read_delim("clinical.csv","\t", escape_double = FALSE, trim_ws = TRUE)
 copy_number <- read_delim("copy_number.csv","\t", escape_double = FALSE, trim_ws = TRUE)
 ```
-### 1. Describe protein abundance and gene expression datasets. How many patients have data of both types available. Are there missing data from some of the datasets? Preprocess them if necessary
 
 The dimensions of the protein abundance dataset are shown below. 
 
@@ -67,7 +66,6 @@ dim(gene.exp2)
 ```
 
 Before the rows with missing values are removed, the gene expression data contains `r dim(gene.exp)[[1]]` unique patients, each of which has its own sampling code. After the rows with missing data are removed, the gene expression data contains `r dim(gene.exp2)[[1]]` unique patients. 
-
 
 ```{r}
 int1 <- intersect(gene.exp$Sample, prot.ab$Sample) 
@@ -117,7 +115,7 @@ Note that the copy number data has no missing values, which means that we do not
 
 From now on we only use the **gene expression data**. 
 
-### 2. Select the 25% of genes with the most variability.
+### Select the 25% of genes with the most variability.
 
 The 25% percent of genes with the most variability are chosen. 
 
@@ -165,23 +163,20 @@ write.csv(data.train, "train_for5.csv")
 write.csv(data.test, "test_for5.csv")
 ```
 
-
-
-### 3. Implement an stacked autoencoder (SAE) with three stacked layers of 1000, 100, 50 nodes. Provide in each case evidence of the quality of the coding obtained.
-
-
 # Implementation of SAE
+
+In this section a stacked autoencoder (SAE) will be implemented. It will consist of three stacked layers of 1000, 100 and 50 nodes. In each case, some qualitative evidence of the quality of coding obtained will be given, in the form of correlation plots between input and output. 
 
 ## First Layer (1000 nodes)
 ```{r}
-# Develope the encoder. 
+# Develop the encoder. 
 input_enc1 <- layer_input(shape = percentage)
 output_enc1 <- input_enc1 %>% 
   layer_dense(units=1000,activation="relu") 
 encoder1 <- keras_model(input_enc1, output_enc1)
 summary(encoder1)
 
-# Develope the decoder. 
+# Develop the decoder. 
 input_dec1 <- layer_input(shape = 1000)
 output_dec1 <- input_dec1 %>% 
   layer_dense(units = percentage, activation="linear")
@@ -392,8 +387,6 @@ write.csv(yhat, file = "predictions.csv")
 save_model_weights_hdf5(sae, "sae.hdf5")
 ```
 
-### 4. Using the SAE as pre-training model, couple it with a two-layer DNN to predict the state of the estrogen receptor. The DNN must have 10 nodes in the first layer followed by the output layer.
-
 # SAE as Pre-Training Model for Prediction of Estrogen Receptor State
 
 The SAE is used as a pre-training model for prediction of the estrogen receptor state. The DNN has 10 nodes in the first layer, followed by one output node. The weights are frozen for the first 3 functional layers, which means that only the weights from the third autoencoder to the first fully connected layer and from the first layer in the DNN to the output layer (in total 521 weights) are to be fine-tuned to obtain the final classifier. 
@@ -431,7 +424,7 @@ sae %>% fit(
 )
 ```
 
-# Performance Metrics
+## Performance Metrics
 
 The model is evaluated on the test set below.  
 
@@ -460,12 +453,9 @@ As is seen above, the AUC is `r round(roc_sae_test$auc, 2)`. COMMENTS / INTERPRE
 
 For an AUC curve, a score of 1 would signify a perfect predictor whilst a score of 0.5 would signify that the predictor is just as good as a random generator (i.e. equivalent to flipping a coin). A score of `r round(roc_sae_test$auc, 2)` is therefore considered acceptable as it should be able to distinguish the various cases to some extent, however there is big room for improvement.
 
+# Use `tfruns` to Explore Configurations of First Fully Connected Layer
 
-### 6. With tfruns() repeat points 4 and 5, exploring the configurations of the first layer of the DNN based on 5, 10 and 20 nodes. Determine which configuration is the best.
-
-# Use `tfruns()` to Explore Configurations of First Fully Connected Layer
-
-The code used with `tfruns` is given in separate R files. Anyhow, the exploration of the first layer of the DNN containing 5, 10 or 20 nodes leads to the conclusion that the configuration with 20 nodes gives the best results. CHECK THIS AGAIN LATER!
+In this section, `tfruns` is used to explore what amount of nodes in the first layer of the DNN gives the best performance. We are asked to search among three different numbers; 5, 10 and 20. The code used with `tfruns` is given in separate R files. Anyhow, the exploration leads to the conclusion that the configuration with 20 nodes gives the best results. 
 
 Thus, the final model is
 
@@ -511,9 +501,6 @@ From the ROC curve we see that the AUC-score now is closer to 1, indicating that
 DENNE ER JO DÅRLIGERE. HVORDAN ORDNE OPP IT STOKASTISITET I TFRUNS + HER? HVILKEN VARIANT SOM ER BEST (5, 10 ELLER 20 NODER) VIRKER VELDIG TILFELDIG (OG AVHENGER OGSÅ STERKT AV HVOR MANGE VEKTER SOM FRYSES). I TILLEGG VIRKER DET IKKE SOM AT metric_val_acc ER ET GODT MÅL PÅ HVILKEN MODELL SOM GIR BEST RESULTATER, DA AUC OG ROC I FLERE TILFELLER VISER NOE ANNET. 
 
 ??? Liv her, AUC nærmere 1 betyr jo at den er bedre? ... må huske å seede kanskje btw
-
-### 7. Split the set of patients with complete data (gene expression and protein abundance) in train and test sets.
-
 
 ## Complete Data 
 
@@ -581,29 +568,27 @@ The SAE for the abundance of proteins (from class examples) is added in the code
 How I understood it: in the file aes_practice_3.R there is a SAE model that we can use for the breast stuff. We need to import this model and concatenate it with the one we created for gene expression.
 
 ```{r}
-#Things gathered from the file given in class
-source("aes_practice_3.R")
+# Model given in class. 
+source("aes_practice_3.R") # source: Parses the code and evaluates it in this environment. 
 ```
 
 
-### 8. Concatenate the two SAEs to fit, on the trainset, a DNN that integrates both data sources to predict estrogen receptor status. The DNN must have a dense layer (with the better number of nodes according with point 6) and the output layer.
+# Concatenated Model
 
-Har antatt at vi skal konkatinere med 2 units, vet ikke om dette stemmer
+In this section we concatenate the two SAEs to fit, on the trainset, a DNN that integrates both data sources to predict estrogen receptor status. The DNN has a dense layer, with 20 nodes, which where the best amount of nodes found with `tfruns` earlier, in addition to the output layer. 
 
 ```{r}
 concatenated<-layer_concatenate(list(sae_output2,sae_protab_output))
 model_output<-concatenated %>% 
-#  layer_dense(10,"relu") %>% 
-  layer_dense(units=2,activation = "softmax")# %>%
-#  layer_dense(units=1,activation="sigmoid")
+  layer_dense(20,"relu") %>% 
+  layer_dense(units=1,activation="softmax")
 
 model<-keras_model(list(sae_input,sae_protab_input), model_output)
 summary(model)
 ```
 
 
-```{r}
-
+```{r, eval = F}
 model %>% compile(
   optimizer = "rmsprop",
   loss = "categorical_crossentropy",
@@ -822,7 +807,7 @@ model %>% fit( # Usikker på om det er rett at begge skal ha den samme dataen!?
 )
 ```
 
-# Performance Metrics
+## Performance Metrics
 
 The model is evaluated on the test set below.  
 
