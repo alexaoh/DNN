@@ -25,6 +25,8 @@ library(ggplot2)
 set.seed(111)
 ```
 
+The objective of this task is to use information on protein abundance and gene expression of patients to predict the breast invasive carcinoma (BRCA) estrogen receptor status. 
+
 # Protein Abundance and Gene Expression Datasets
 
 
@@ -44,7 +46,7 @@ dim(prot.ab)
 all(complete.cases(prot.ab)) # TRUE: There are no missing values. 
 ```
 
-The dataset has no missing values. It contains 410 unique patients, each of which has its own sampling code, where each patient has recorded a numerical value that gives abundance of 142 different proteins. 
+The protein abundance dataset has no missing values. It contains 410 unique patients, where each patient has its own sampling code and a numerical value that gives the abundance of 142 different proteins. 
 
 The dimensions of the gene expression dataset are shown below. 
 
@@ -56,7 +58,7 @@ dim(gene.exp)
 all(complete.cases(gene.exp)) # FALSE: There are missing values in some of the columns. 
 ```
 
-The dataset has missing values. The missing values are removed from the dataset in the following block of code. 
+The gene expression dataset has missing values. The missing values are simply removed from the dataset in the following block of code. 
 
 ```{r}
 dim(gene.exp)
@@ -66,31 +68,52 @@ dim(gene.exp2)
 
 Before the rows with missing values are removed, the gene expression data contains `r dim(gene.exp)[[1]]` unique patients, each of which has its own sampling code. After the rows with missing data are removed, the gene expression data contains `r dim(gene.exp2)[[1]]` unique patients. 
 
+Next we find which patients have data of both types available, keeping in mind that the response we want to predict is contained in the `clinical` data. Before continuing, note that the `clinical` data has the following dimensions
+
 ```{r}
-int1 <- intersect(gene.exp$Sample, prot.ab$Sample) 
-length(int1)
-int2 <- intersect(gene.exp2$Sample, prot.ab$Sample)
-length(int2)
-int3 <- intersect(int2, clinical$Sample) # Dette kan kanskje gjøres etter "massasjen" jeg gjør lenger nede!?
-length(int3)
-
-# Kanskje dataen nedenfor kan brukes i stedet? Dvs, vi bryr oss ikke om personer som har gene.exp data, men ikke har prot.ab data? Se hva de krever lenger nede!
-int4 <- intersect(gene.exp2$Sample, clinical$Sample)
-length(int4)
-
-# Usikker på hva slags data vi skal bruke!
-
-#Liv her. Jeg tolka det som at vi i punkt 2-6 benytter oss av gene expression data (med alle pasienter, t.o.m de som ikke har prot. ab data) og i 7-9 benytter oss av dataen til pasienter som har begge deler. På én side er det litt wack å ikke benytte seg av samme antall pasienter ift sammenligning (flere samples -> lettere å sammenlikne) men på en annen side ser vi jo på flere data når vi ser på begge datasettene, dvs blir input-data aldri likt uansett. Dette er up for discussion haha kan hende jeg har misforstått alt lol
-
-# Hannes: Jag tolkar det också som att vi enbart ska fokusera på gene expression i delfrågorna 2-6. De ber ju oss att göra en ny uppdelning av patienter med både full data (gene expression och protein abundance) i deluppgift 7. Alltså tror jag på att använda set int4 som chosen.data.
+dim(clinical)
 ```
 
-From the code above we can see that `r length(int1)` of the patients' sample codes exist in both the protein abundance and the gene expression datasets, before removing the rows with missing values from the gene expression data. This is not interesting to us however, since we are only interested in individuals who don't have missing gene expression data. After removing the missing values from the gene expression data, the number of patients that have data available for both gene expression and protein abundance is `r length(int2)`. Moreover, `r length(int3)` of the patients' sample codes exist in all three datasets, when the `clinical` dataset is included (without considering missing values in the `clinical` data. This is done next). This means that this amount of patients have data of both types available. But do all these individuals have data concerning their breast invasive carcinoma (BRCA) estrogen receptor status? Next, we remove all the individuals that don't have this information. 
+and we only care about columns 1 and 9. Column 1 contains the identifier of each patient, which are `r dim(clinical)[[1]]` in total in this dataset. Column 9 contains the response we want to predict, which has the following unique values
 
 ```{r}
-# TODO (decide): Om vi väljer int4 som chosen.data behöver vi kanske skriv om lite av texten ovan. Nu låter det som att vi tar bort patienter som inte har positiv/negativ ur int3.
+unique(clinical[,9])
+```
 
-chosen.data <- int4 # Change this definition after deciding which data set to use!
+These values will be preprocessed later. Below the code used to find patients that have data available is given. 
+
+```{r}
+full.gene.clin <- intersect(gene.exp2$Sample, clinical$Sample)
+length(full.gene.clin)
+```
+
+The first intersection that is shown is the intersection between the gene expression data with no missing values and the clinical data, i.e. this intersection now contains all unique patient identifiers that exist in the gene data and have recorded the response. Notice that this the data that will be used in the first part of the task. 
+
+```{r}
+int.gene.prot <- intersect(gene.exp$Sample, prot.ab$Sample) 
+length(int.gene.prot)
+```
+
+The second intersection that is shown is the intersection between the gene expression data which still contains missing values and the protein abundance data. This will not be used in the analysis, but is given because it might be interesting to keep in mind. Thus we can see that `r length(int.gene.prot)` of the patients' sample codes exist in both the protein abundance and the gene expression datasets, before removing the rows with missing values from the gene expression data. 
+
+```{r}
+int.gene.full.prot <- intersect(gene.exp2$Sample, prot.ab$Sample)
+length(int.gene.full.prot)
+```
+
+The third intersection gives the unique patients that have no missing gene expression data and have recorded protein abundance data. This is used in order to define the next intersection. 
+
+```{r}
+full.gene.prot.clin <- intersect(int.gene.full.prot, clinical$Sample) 
+length(full.gene.prot.clin)
+```
+
+The last intersection gives the intersection between the third list of patients and the patients in the `clinical` dataset. Thus, this contains the unique list of patients that have all necessary data in all three datasets. Notice that these patients will be used to define the complete dataset, which will be used for the concatenated model later in the analysis. 
+
+As noted earlier, we will now only use the intersection `full.gene.clin`. Even though we now that all these patients have a recorded breast invasive carcinoma (BRCA) estrogen receptor status, we need to check that the values they have recorded are either `Positive` or `Negative`, keeping in mind the values we saw that the `clinical` dataset contains. Next, we remove all the individuals that don't have this information. 
+
+```{r}
+chosen.data <-  full.gene.clin
 xclin <- clinical[,c(1,9)]
 colnames(xclin) <- c("Sample", "BRCA")
 xclin <- xclin[clinical$Sample %in% chosen.data, ] 
@@ -107,8 +130,6 @@ xclin <- xclin[-which(is.na(xclin$BRCA)),] # Also remove rows with missing data 
 # Join the (cleaned) clinical data and the gene expression data on "Sample".
 mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
 ```
-
-Note that the copy number data has no missing values, which means that we do not need to remove any data. 
 
 ## Gene Expression Data
 
@@ -506,7 +527,7 @@ DENNE ER JO DÅRLIGERE. HVORDAN ORDNE OPP IT STOKASTISITET I TFRUNS + HER? HVILK
 The **complete data** (gene expression and protein abundance) is split into train and test sets. 
 
 ```{r}
-chosen.data <- int3 # Change this definition after deciding which data set to use!
+chosen.data <- full.gene.prot.clin # Change this definition after deciding which data set to use!
 xclin <- clinical[,c(1,9)]
 colnames(xclin) <- c("Sample", "BRCA")
 xclin <- xclin[clinical$Sample %in% chosen.data, ] 
