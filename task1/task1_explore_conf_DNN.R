@@ -4,6 +4,7 @@
 library(keras)
 library(readr)
 library(pROC)
+library(caret)
 
 # Load and clean data before defining the model. The code is identical to in the main Rmd file. 
 ## ---------------------------------------------------------------------------------
@@ -68,7 +69,7 @@ library(pROC)
 
 data.train <- read.csv("train_for5.csv")[,-1]
 data.test <- read.csv("test_for5.csv")[,-1]
-xtrain1 <- data.matrix(data.train[,-1])
+xtrain <- data.matrix(data.train[,-1])
 ylabels <- data.matrix(data.train[,1])
 xtest <- data.matrix(data.test[,-1])
 ytestlabels <- data.matrix(data.test[,1])
@@ -153,6 +154,8 @@ sae %>%
 yhat <- predict(sae,xtest)
 yhatclass<-as.factor(ifelse(yhat<0.5,0,1))
 confusionMatrix(yhatclass,as.factor(c(ytestlabels)))
+
+cat("The number of layers used were: ", FLAGS$units)
 
 
 ## ---------------------------------------------------------------------------------

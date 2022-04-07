@@ -22,7 +22,6 @@ library(tidyverse)
 library(caret)
 library(ggplot2)
 
-gc()
 set.seed(111)
 ```
 

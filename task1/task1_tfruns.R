@@ -10,15 +10,14 @@ for (u in scenarios){
 }
 
 # Check the performance to different scenarios
-performance.table <-  ls_runs(metric_val_acc > 0.7, order = metric_val_acc)
+performance.table <-  ls_runs(metric_val_acc > 0.78, order = metric_val_acc)
 
+# Print the units of each of the runs in the performance table. 
+performance.table$flag_units
 
-#performance.table$flag_layers[1]
-
-# Run the best architecture to obtain the final weights
+# Run the best architecture to obtain the final weights.
 i <- 1
-training_run("task1_explore_conf_DNN.R",
-             flags= c(units = performance.table$flag_units[i]))
+# training_run("task1_explore_conf_DNN.R",flags= c(units = performance.table$flag_units[i]))
 
 
 # Compare the two runs with the highest metric accuracy!
