@@ -32,7 +32,6 @@ set.seed(111)
 gene.exp <- read_delim("gene_expression.csv", "\t", escape_double = FALSE, trim_ws = TRUE)
 prot.ab <- read_delim("protein_abundance.csv", "\t", escape_double = FALSE, trim_ws = TRUE)
 clinical <- read_delim("clinical.csv","\t", escape_double = FALSE, trim_ws = TRUE)
-copy_number <- read_delim("copy_number.csv","\t", escape_double = FALSE, trim_ws = TRUE)
 ```
 
 The dimensions of the protein abundance dataset are shown below. 
