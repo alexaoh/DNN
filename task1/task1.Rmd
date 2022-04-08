@@ -101,19 +101,20 @@ int.gene.full.prot <- intersect(gene.exp2$Sample, prot.ab$Sample)
 length(int.gene.full.prot)
 ```
 
-The third intersection gives the unique patients that have no missing gene expression data and have recorded protein abundance data. This is used in order to define the next intersection. 
+The intersection above gives the unique patients that have no missing gene expression data and have recorded protein abundance data. This is used in order to define the next intersection. 
 
 ```{r}
 full.gene.prot.clin <- intersect(int.gene.full.prot, clinical$Sample) 
 length(full.gene.prot.clin)
 ```
 
-The last intersection gives the intersection between the third list of patients and the patients in the `clinical` dataset. Thus, this contains the unique list of patients that have all necessary data in all three datasets. Notice that these patients will be used to define the complete dataset, which will be used for the concatenated model later in the analysis. 
+The last intersection gives the intersection between the third list of patients (`int.gene.full.prot`) and the patients in the `clinical` dataset. Thus, this contains the unique list of patients that have all necessary data in all three datasets. Notice that these patients will be used to define the complete dataset, which will be used for the concatenated model later in the analysis. 
 
-As noted earlier, we will now only use the intersection `full.gene.clin`. Even though we now that all these patients have a recorded breast invasive carcinoma (BRCA) estrogen receptor status, we need to check that the values they have recorded are either `Positive` or `Negative`, keeping in mind the values we saw that the `clinical` dataset contains. Next, we remove all the individuals that don't have this information. 
+As noted earlier, we will now only use the intersection `full.gene.clin`. Even though we know that all these patients have a recorded breast invasive carcinoma (BRCA) estrogen receptor status, we need to check that the values they have recorded are either `Positive` or `Negative`, keeping in mind the values we saw that the `clinical` dataset contains. Next, we remove all the individuals that don't have this information. 
 
 ```{r}
 chosen.data <-  full.gene.clin
+
 xclin <- clinical[,c(1,9)]
 colnames(xclin) <- c("Sample", "BRCA")
 xclin <- xclin[clinical$Sample %in% chosen.data, ] 
@@ -133,11 +134,11 @@ mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
 
 ## Gene Expression Data
 
-From now on we only use the **gene expression data**. 
+From now on we only use the **gene expression data**. That's why we in the questions 2-6 will use the last mentioned set above which now consists of the patients that has both complete gene expression dataset and a data concerning their breast invasive carcinoma (BRCA) estrogen receptor status: positive or negative. (Later in question 7 and 8, the patients with complete data will be used, that is only using the set of patients that is also included in the protein abundance dataset, as mentioned earlier.)
 
 ### Select the 25% of genes with the most variability.
 
-The 25% percent of genes with the most variability are chosen. 
+The 25% percent of genes with the most variability are chosen. Information about the genes chosen are stored and reused later in the selection of the genes for the other set in section 4 onwards, to make sure that the same set of genes that the network was trained with are the ones selected for that set as well. 
 
 ```{r}
 percentage <- round(dim(mgene[,-c(1,2)])[[2]]*0.25) # Find how many variables correspond to 25%. 
@@ -525,6 +526,8 @@ DENNE ER JO DÅRLIGERE. HVORDAN ORDNE OPP IT STOKASTISITET I TFRUNS + HER? HVILK
 ## Complete Data 
 
 The **complete data** (gene expression and protein abundance) is split into train and test sets. 
+
+ATT LÄGGA IN VID DEN MOTSVARANDE KODEN: As explained in section 1, the same set of gene features is used in this dataset, in order to secure that the input now consists of the same genes that the network was trained on in previous sections. 
 
 ```{r}
 chosen.data <- full.gene.prot.clin # Change this definition after deciding which data set to use!
