@@ -1,7 +1,7 @@
 ---
 title: "Task1"
 subtitle: "Statistical Learning with Deep Artificial Neural Networks"
-author: "Alexander J Ohrt, Liv Breivik, Hannes Johansson"
+author: "Liv Breivik, Hannes Johansson, Alexander J Ohrt"
 date: "`r format(Sys.time(), '%d. %b. %Y')`"
 output: 
    html_document:
@@ -25,6 +25,8 @@ library(ggplot2)
 set.seed(111)
 ```
 
+The objective of this task is to use information on protein abundance and gene expression of patients to predict the breast invasive carcinoma (BRCA) estrogen receptor status. 
+
 # Protein Abundance and Gene Expression Datasets
 
 
@@ -32,9 +34,7 @@ set.seed(111)
 gene.exp <- read_delim("gene_expression.csv", "\t", escape_double = FALSE, trim_ws = TRUE)
 prot.ab <- read_delim("protein_abundance.csv", "\t", escape_double = FALSE, trim_ws = TRUE)
 clinical <- read_delim("clinical.csv","\t", escape_double = FALSE, trim_ws = TRUE)
-copy_number <- read_delim("copy_number.csv","\t", escape_double = FALSE, trim_ws = TRUE)
 ```
-### 1. Describe protein abundance and gene expression datasets. How many patients have data of both types available. Are there missing data from some of the datasets? Preprocess them if necessary
 
 The dimensions of the protein abundance dataset are shown below. 
 
@@ -46,7 +46,7 @@ dim(prot.ab)
 all(complete.cases(prot.ab)) # TRUE: There are no missing values. 
 ```
 
-The dataset has no missing values. It contains 410 unique patients, each of which has its own sampling code, where each patient has recorded a numerical value that gives abundance of 142 different proteins. 
+The protein abundance dataset has no missing values. It contains 410 unique patients, where each patient has its own sampling code and a numerical value that gives the abundance of 142 different proteins. 
 
 The dimensions of the gene expression dataset are shown below. 
 
@@ -58,7 +58,7 @@ dim(gene.exp)
 all(complete.cases(gene.exp)) # FALSE: There are missing values in some of the columns. 
 ```
 
-The dataset has missing values. The missing values are removed from the dataset in the following block of code. 
+The gene expression dataset has missing values. The missing values are simply removed from the dataset in the following block of code. 
 
 ```{r}
 dim(gene.exp)
@@ -68,33 +68,53 @@ dim(gene.exp2)
 
 Before the rows with missing values are removed, the gene expression data contains `r dim(gene.exp)[[1]]` unique patients, each of which has its own sampling code. After the rows with missing data are removed, the gene expression data contains `r dim(gene.exp2)[[1]]` unique patients. 
 
+Next we find which patients have data of both types available, keeping in mind that the response we want to predict is contained in the `clinical` data. Before continuing, note that the `clinical` data has the following dimensions
 
 ```{r}
-int1 <- intersect(gene.exp$Sample, prot.ab$Sample) 
-length(int1)
-int2 <- intersect(gene.exp2$Sample, prot.ab$Sample)
-length(int2)
-int3 <- intersect(int2, clinical$Sample) # Dette kan kanskje gjøres etter "massasjen" jeg gjør lenger nede!?
-length(int3)
-
-# Kanskje dataen nedenfor kan brukes i stedet? Dvs, vi bryr oss ikke om personer som har gene.exp data, men ikke har prot.ab data? Se hva de krever lenger nede!
-int4 <- intersect(gene.exp2$Sample, clinical$Sample)
-length(int4)
-
-# Usikker på hva slags data vi skal bruke!
-
-#Liv her. Jeg tolka det som at vi i punkt 2-6 benytter oss av gene expression data (med alle pasienter, t.o.m de som ikke har prot. ab data) og i 7-9 benytter oss av dataen til pasienter som har begge deler. På én side er det litt wack å ikke benytte seg av samme antall pasienter ift sammenligning (flere samples -> lettere å sammenlikne) men på en annen side ser vi jo på flere data når vi ser på begge datasettene, dvs blir input-data aldri likt uansett. Dette er up for discussion haha kan hende jeg har misforstått alt lol
-
-# Hannes: Jag tolkar det också som att vi enbart ska fokusera på gene expression i delfrågorna 2-6. De ber ju oss att göra en ny uppdelning av patienter med både full data (gene expression och protein abundance) i deluppgift 7. Alltså tror jag på att använda set int4 som chosen.data.
+dim(clinical)
 ```
 
-From the code above we can see that `r length(int1)` of the patients' sample codes exist in both the protein abundance and the gene expression datasets, before removing the rows with missing values from the gene expression data. This is not interesting to us however, since we are only interested in individuals who don't have missing gene expression data. After removing the missing values from the gene expression data, the number of patients that have data available for both gene expression and protein abundance is `r length(int2)`. Moreover, `r length(int3)` of the patients' sample codes exist in all three datasets; when the `clinical` dataset is included together with the gene expression dataset and the protein abundance dataset (without considering missing values in the `clinical` data, this is handled later). This means that this amount of patients have data of both types available. But do all these individuals have data concerning their breast invasive carcinoma (BRCA) estrogen receptor status? Later, in step 7 when this set is going to be used, we remove all the individuals that don't have this information. 
-
-
-If we instead disregards focus on the protein abundance for now, the number of the patients' sample codes that exist in both the the clinical dataset and in the complete gene expression dataset (i.e. when rows with missing gene expression data have been removed) are `r length(int4)`, also calculated without regards of missing values in the clinical data. This is the set that is going to be used in question 2-6 when the focus is on gene expression only. Next, we remove all the individuals that don't have data concerning their breast invasive carcinoma (BRCA) estrogen receptor status in this set.
+and we only care about columns 1 and 9. Column 1 contains the identifier of each patient, which are `r dim(clinical)[[1]]` in total in this dataset. Column 9 contains the response we want to predict, which has the following unique values
 
 ```{r}
-chosen.data <- int4 # Change this definition after deciding which data set to use!
+unique(clinical[,9])
+```
+
+These values will be preprocessed later. Below the code used to find patients that have data available is given. 
+
+```{r}
+full.gene.clin <- intersect(gene.exp2$Sample, clinical$Sample)
+length(full.gene.clin)
+```
+
+The first intersection that is shown is the intersection between the gene expression data with no missing values and the clinical data, i.e. this intersection now contains all unique patient identifiers that exist in the gene data and have recorded the response. Notice that this the data that will be used in the first part of the task. 
+
+```{r}
+int.gene.prot <- intersect(gene.exp$Sample, prot.ab$Sample) 
+length(int.gene.prot)
+```
+
+The second intersection that is shown is the intersection between the gene expression data which still contains missing values and the protein abundance data. This will not be used in the analysis, but is given because it might be interesting to keep in mind. Thus we can see that `r length(int.gene.prot)` of the patients' sample codes exist in both the protein abundance and the gene expression datasets, before removing the rows with missing values from the gene expression data. 
+
+```{r}
+int.gene.full.prot <- intersect(gene.exp2$Sample, prot.ab$Sample)
+length(int.gene.full.prot)
+```
+
+The intersection above gives the unique patients that have no missing gene expression data and have recorded protein abundance data. This is used in order to define the next intersection. 
+
+```{r}
+full.gene.prot.clin <- intersect(int.gene.full.prot, clinical$Sample) 
+length(full.gene.prot.clin)
+```
+
+The last intersection gives the intersection between the third list of patients (`int.gene.full.prot`) and the patients in the `clinical` dataset. Thus, this contains the unique list of patients that have all necessary data in all three datasets. Notice that these patients will be used to define the complete dataset, which will be used for the concatenated model later in the analysis. 
+
+As noted earlier, we will now only use the intersection `full.gene.clin`. Even though we know that all these patients have a recorded breast invasive carcinoma (BRCA) estrogen receptor status, we need to check that the values they have recorded are either `Positive` or `Negative`, keeping in mind the values we saw that the `clinical` dataset contains. Next, we remove all the individuals that don't have this information. 
+
+```{r}
+chosen.data <-  full.gene.clin
+
 xclin <- clinical[,c(1,9)]
 colnames(xclin) <- c("Sample", "BRCA")
 xclin <- xclin[clinical$Sample %in% chosen.data, ] 
@@ -112,15 +132,13 @@ xclin <- xclin[-which(is.na(xclin$BRCA)),] # Also remove rows with missing data 
 mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
 ```
 
-Note that the copy number data has no missing values, which means that we do not need to remove any data. 
-
 ## Gene Expression Data
 
 From now on we only use the **gene expression data**. That's why we in the questions 2-6 will use the last mentioned set above which now consists of the patients that has both complete gene expression dataset and a data concerning their breast invasive carcinoma (BRCA) estrogen receptor status: positive or negative. (Later in question 7 and 8, the patients with complete data will be used, that is only using the set of patients that is also included in the protein abundance dataset, as mentioned earlier.)
 
-### 2. Select the 25% of genes with the most variability.
+### Select the 25% of genes with the most variability.
 
-The 25% percent of genes with the most variability are chosen. (Information about the genes chosen are stored and reused later in the selection of the genes for the other set in question 7, to make sure that the same of genes that the network was trained with are the ones selected for that set as well.)
+The 25% percent of genes with the most variability are chosen. Information about the genes chosen are stored and reused later in the selection of the genes for the other set in section 4 onwards, to make sure that the same set of genes that the network was trained with are the ones selected for that set as well. 
 
 ```{r}
 percentage <- round(dim(mgene[,-c(1,2)])[[2]]*0.25) # Find how many variables correspond to 25%. 
@@ -166,23 +184,20 @@ write.csv(data.train, "train_for5.csv")
 write.csv(data.test, "test_for5.csv")
 ```
 
-
-
-### 3. Implement an stacked autoencoder (SAE) with three stacked layers of 1000, 100, 50 nodes. Provide in each case evidence of the quality of the coding obtained.
-
-
 # Implementation of SAE
+
+In this section a stacked autoencoder (SAE) will be implemented. It will consist of three stacked layers of 1000, 100 and 50 nodes. In each case, some qualitative evidence of the quality of coding obtained will be given, in the form of correlation plots between input and output. 
 
 ## First Layer (1000 nodes)
 ```{r}
-# Develope the encoder. 
+# Develop the encoder. 
 input_enc1 <- layer_input(shape = percentage)
 output_enc1 <- input_enc1 %>% 
   layer_dense(units=1000,activation="relu") 
 encoder1 <- keras_model(input_enc1, output_enc1)
 summary(encoder1)
 
-# Develope the decoder. 
+# Develop the decoder. 
 input_dec1 <- layer_input(shape = 1000)
 output_dec1 <- input_dec1 %>% 
   layer_dense(units = percentage, activation="linear")
@@ -393,8 +408,6 @@ write.csv(yhat, file = "predictions.csv")
 save_model_weights_hdf5(sae, "sae.hdf5")
 ```
 
-### 4. Using the SAE as pre-training model, couple it with a two-layer DNN to predict the state of the estrogen receptor. The DNN must have 10 nodes in the first layer followed by the output layer.
-
 # SAE as Pre-Training Model for Prediction of Estrogen Receptor State
 
 The SAE is used as a pre-training model for prediction of the estrogen receptor state. The DNN has 10 nodes in the first layer, followed by one output node. The weights are frozen for the first 3 functional layers, which means that only the weights from the third autoencoder to the first fully connected layer and from the first layer in the DNN to the output layer (in total 521 weights) are to be fine-tuned to obtain the final classifier. 
@@ -432,7 +445,7 @@ sae %>% fit(
 )
 ```
 
-# Performance Metrics
+## Performance Metrics
 
 The model is evaluated on the test set below.  
 
@@ -461,12 +474,9 @@ As is seen above, the AUC is `r round(roc_sae_test$auc, 2)`. COMMENTS / INTERPRE
 
 For an AUC curve, a score of 1 would signify a perfect predictor whilst a score of 0.5 would signify that the predictor is just as good as a random generator (i.e. equivalent to flipping a coin). A score of `r round(roc_sae_test$auc, 2)` is therefore considered acceptable as it should be able to distinguish the various cases to some extent, however there is big room for improvement.
 
+# Use `tfruns` to Explore Configurations of First Fully Connected Layer
 
-### 6. With tfruns() repeat points 4 and 5, exploring the configurations of the first layer of the DNN based on 5, 10 and 20 nodes. Determine which configuration is the best.
-
-# Use `tfruns()` to Explore Configurations of First Fully Connected Layer
-
-The code used with `tfruns` is given in separate R files. Anyhow, the exploration of the first layer of the DNN containing 5, 10 or 20 nodes leads to the conclusion that the configuration with 20 nodes gives the best results. CHECK THIS AGAIN LATER!
+In this section, `tfruns` is used to explore what amount of nodes in the first layer of the DNN gives the best performance. We are asked to search among three different numbers; 5, 10 and 20. The code used with `tfruns` is given in separate R files. Anyhow, the exploration leads to the conclusion that the configuration with 20 nodes gives the best results. 
 
 Thus, the final model is
 
@@ -513,17 +523,14 @@ DENNE ER JO DÅRLIGERE. HVORDAN ORDNE OPP IT STOKASTISITET I TFRUNS + HER? HVILK
 
 ??? Liv her, AUC nærmere 1 betyr jo at den er bedre? ... må huske å seede kanskje btw
 
-### 7. Split the set of patients with complete data (gene expression and protein abundance) in train and test sets.
-
-
 ## Complete Data 
 
 The **complete data** (gene expression and protein abundance) is split into train and test sets. 
 
-ATT LÄGGA IN VID DEN MOTSVARANDE KODEN: As explained in section 2, the same gene selection as then is used for this set to secure that the input now consist of the same genes as the network was trained with in previous sections. 
+ATT LÄGGA IN VID DEN MOTSVARANDE KODEN: As explained in section 1, the same set of gene features is used in this dataset, in order to secure that the input now consists of the same genes that the network was trained on in previous sections. 
 
 ```{r}
-chosen.data <- int3 # Change this definition after deciding which data set to use!
+chosen.data <- full.gene.prot.clin # Change this definition after deciding which data set to use!
 xclin <- clinical[,c(1,9)]
 colnames(xclin) <- c("Sample", "BRCA")
 xclin <- xclin[clinical$Sample %in% chosen.data, ] 
@@ -584,29 +591,27 @@ The SAE for the abundance of proteins (from class examples) is added in the code
 How I understood it: in the file aes_practice_3.R there is a SAE model that we can use for the breast stuff. We need to import this model and concatenate it with the one we created for gene expression.
 
 ```{r}
-#Things gathered from the file given in class
-source("aes_practice_3.R")
+# Model given in class. 
+source("aes_practice_3.R") # source: Parses the code and evaluates it in this environment. 
 ```
 
 
-### 8. Concatenate the two SAEs to fit, on the trainset, a DNN that integrates both data sources to predict estrogen receptor status. The DNN must have a dense layer (with the better number of nodes according with point 6) and the output layer.
+# Concatenated Model
 
-Har antatt at vi skal konkatinere med 2 units, vet ikke om dette stemmer
+In this section we concatenate the two SAEs to fit, on the trainset, a DNN that integrates both data sources to predict estrogen receptor status. The DNN has a dense layer, with 20 nodes, which where the best amount of nodes found with `tfruns` earlier, in addition to the output layer. 
 
 ```{r}
 concatenated<-layer_concatenate(list(sae_output2,sae_protab_output))
 model_output<-concatenated %>% 
-#  layer_dense(10,"relu") %>% 
-  layer_dense(units=2,activation = "softmax")# %>%
-#  layer_dense(units=1,activation="sigmoid")
+  layer_dense(20,"relu") %>% 
+  layer_dense(units=1,activation="softmax")
 
 model<-keras_model(list(sae_input,sae_protab_input), model_output)
 summary(model)
 ```
 
 
-```{r}
-
+```{r, eval = F}
 model %>% compile(
   optimizer = "rmsprop",
   loss = "categorical_crossentropy",
@@ -825,7 +830,7 @@ model %>% fit( # Usikker på om det er rett at begge skal ha den samme dataen!?
 )
 ```
 
-# Performance Metrics
+## Performance Metrics
 
 The model is evaluated on the test set below.  
 
