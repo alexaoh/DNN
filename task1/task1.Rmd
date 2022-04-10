@@ -153,7 +153,7 @@ The selected `r percentage` genes are used to implement a stacked autoencoder (S
 
 ```{r}
 set.seed(111)
-training.fraction <- 0.70 # 75 % of data will be used for training. 
+training.fraction <- 0.70 # 70 % of data will be used for training. 
 training <- sample(1:nrow(mgene.lvar),nrow(mgene.lvar)*training.fraction) 
 
 xtrain <- mgene.lvar[training,-c(1,2)]
@@ -573,7 +573,7 @@ mtot <- merge(mgene, xprot, by.x = "Sample", by.y = "Sample")
 #mtot <- xclin %>% left_join(xgene) %>% left_join(xprot, by = "Sample") # This gives the same result. 
 
 set.seed(111)
-training.fraction <- 0.70 # 75 % of data will be used for training. 
+training.fraction <- 0.70 # 70 % of data will be used for training. 
 training <- sample(1:nrow(mtot),nrow(mtot)*training.fraction) 
 
 xtrain <- mtot[training,-c(1,2)]
@@ -852,7 +852,7 @@ model %>% compile(
 model %>% fit( # Usikker på om det er rett at begge skal ha den samme dataen!?
   # Mulig dette blir helt feil dimensjoner!
   list(gene.mod=xtrain,prot.mod=xtrain), ylabels,
-  epochs = 300, batch_size = 16, validation_split = 0.2,
+  epochs = 60, batch_size = 16, validation_split = 0.2,
   callbacks = callbacks_parameters
 )
 ```
@@ -883,3 +883,5 @@ legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
 ```
 
 # Discussion
+
+
