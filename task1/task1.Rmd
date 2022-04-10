@@ -153,7 +153,7 @@ The selected `r percentage` genes are used to implement a stacked autoencoder (S
 
 ```{r}
 set.seed(111)
-training.fraction <- 0.7 # 70 % of data will be used for training. 
+training.fraction <- 0.70 # 75 % of data will be used for training. 
 training <- sample(1:nrow(mgene.lvar),nrow(mgene.lvar)*training.fraction) 
 
 xtrain <- mgene.lvar[training,-c(1,2)]
@@ -213,7 +213,7 @@ sae1 <- keras_model(aen_input1, aen_output1)
 summary(sae1)
 ```
 
-We compile the model and fit it to the training data. 
+We compile the model and fit it to the training data. To decide the final number of epochs each 'val-loss'-value is regarded after each epoch. If the value has not decreased in a certain number of epochs the training will stop. This is to reduce the risk of overfitting the network, that is that the network may otherwise learn patterns that are too specific for the training data while the performance on the actual validation data begins to decrease. 
 
 ```{r comp}
 sae1 %>% compile(
@@ -223,12 +223,21 @@ sae1 %>% compile(
 ```
 
 ```{r fit}
+callbacks_parameters <- callback_early_stopping(
+  monitor = "val_loss",
+  patience = 12,
+  verbose = 1,
+  mode = "min",
+  restore_best_weights = FALSE
+)
+
 sae1 %>% fit(
   x = xtrain,
   y = xtrain,
-  epochs = 25,
+  epochs = 40,
   batch_size = 64,
-  validation_split = 0.2
+  validation_split = 0.2,
+  callbacks = callbacks_parameters
 )
 ```
 
@@ -250,7 +259,7 @@ vcor <- diag(cor(x.hat,xtrain))
 hist(vcor, main = "Correlation on Training Data")
 ```
 
-The histogram above shows that the correlation between the training data and the predictions from the first autoencoder are relatively high. We do the same check on the test set. 
+The histogram above shows that the correlation between the training data and the predictions from the first autoencoder are relatively high. Worth menitioning is that if we had not implemented the training stop when no progression of the validation data was registered, the correlation on the training set would be significantly higher, as the network would continue to fit the parameters to the training data. As stated, this would probably have resulted in worse values for the initial test set that we set aside before the training started. We do the same check on the test set. 
 
 ```{r}
 x.hat <- predict(sae1,xtest)
@@ -295,16 +304,25 @@ sae2 %>% compile(
 ```
 
 ```{r}
+callbacks_parameters <- callback_early_stopping(
+  monitor = "val_loss",
+  patience = 8,
+  verbose = 1,
+  mode = "min",
+  restore_best_weights = FALSE
+)
+
 sae2 %>% fit(
   x = encoded_expression1,
   y = encoded_expression1,
-  epochs = 25,
+  epochs = 70,
   batch_size = 64,
-  validation_split = 0.2
+  validation_split = 0.2,
+  callbacks = callbacks_parameters
 )
 ```
 
-We make predictions on the training data, which in this case is the training data reduced in dimension from the first autoencoder.  
+We make predictions on the training data, which in this case is the training data reduced in dimension from the first autoencoder. Also here we use the automatic training stop when the performance on the validation set has stopped improving.
 
 ```{r}
 encoded_expression2 <- encoder2 %>% predict(encoded_expression1) 
@@ -362,9 +380,10 @@ sae3 %>% compile(
 sae3 %>% fit(
   x = encoded_expression2,
   y = encoded_expression2,
-  epochs = 25,
+  epochs = 180,
   batch_size = 64,
-  validation_split = 0.2
+  validation_split = 0.2,
+  callbacks = callbacks_parameters
 )
 ```
 
@@ -387,6 +406,8 @@ hist(vcor, main = "Correlation with Input Data (Encoded from sae2)")
 ```
 
 The histogram above shows that there is some correlation between the input and the predictions from the second autoencoder. Notice that the correlation is less than earlier though. Also note that we do not have a test set in this case, since the dimension of the output data from sae3 is 100, which is less than the amount of features in the test data. 
+
+TODO: DUBBELKOLLA VARFÖR TRÄNINGEN KÖR SÅ HIMLA LÄNGE I DETTA FALLET. HAR LETAT: DET KAN VARA KORREKT MEN DET KAN OCKSÅ HA SKETT PÅ GRUND AV NÅGOT TIDIGARE FEL NÅGONSTANS NÄR VI FÖRST SKREV DELEN.
 
 ## Final Model (SAE)
 
@@ -439,9 +460,10 @@ sae %>% compile(
 sae %>% fit(
   x=xtrain,
   y=ylabels,
-  epochs = 30,
+  epochs = 80,
   batch_size=64,
-  validation_split = 0.2
+  validation_split = 0.2,
+  callbacks = callbacks_parameters
 )
 ```
 
@@ -500,9 +522,10 @@ sae %>% compile(
 sae %>% fit(
   x=xtrain,
   y=ylabels,
-  epochs = 30,
+  epochs = 80,
   batch_size=64,
-  validation_split = 0.2
+  validation_split = 0.2,
+  callbacks = callbacks_parameters
 )
 
 sae %>%
@@ -550,7 +573,7 @@ mtot <- merge(mgene, xprot, by.x = "Sample", by.y = "Sample")
 #mtot <- xclin %>% left_join(xgene) %>% left_join(xprot, by = "Sample") # This gives the same result. 
 
 set.seed(111)
-training.fraction <- 0.7 # 70 % of data will be used for training. 
+training.fraction <- 0.70 # 75 % of data will be used for training. 
 training <- sample(1:nrow(mtot),nrow(mtot)*training.fraction) 
 
 xtrain <- mtot[training,-c(1,2)]
@@ -622,7 +645,7 @@ model %>% compile(
 #Den her funker ikke. Jeg tror det er fordi xgene_train har 17000 ish kolonner. Den burde egentlig ha typ 4454 eller noe liknende. Må se litt på datarensing. (kan også hende jeg har gjort ting helt feil i tillegg)
 model %>% fit(
   list(gene.mod=xgene_train, prot.mod=xprot_train), as.array(ylabels),
-  epochs = 75, batch_size = 16, validation_split = 0.2
+  epochs = 75, batch_size = 64, validation_split = 0.2
 )
 
 ```
@@ -676,9 +699,10 @@ sae1 %>% compile(
 sae1 %>% fit(
   x=as.matrix(xtrain),
   y=ylabels,
-  epochs = 25,
+  epochs = 100,
   batch_size=64,
-  validation_split = 0.2
+  validation_split = 0.2,
+  callbacks = callbacks_parameters
   )
 #y=as.matrix(xtrain)
 
@@ -727,9 +751,10 @@ sae2 %>% compile(
 sae2 %>% fit(
   x=as.matrix(encoded_expression1),
   y=as.matrix(encoded_expression1),
-  epochs = 25,
+  epochs = 300,
   batch_size=64,
-  validation_split = 0.2
+  validation_split = 0.2,
+  callbacks = callbacks_parameters
   )
 
 
@@ -777,9 +802,10 @@ sae3 %>% compile(
 sae3 %>% fit(
   x=as.matrix(encoded_expression2),
   y=as.matrix(encoded_expression2),
-  epochs = 25,
+  epochs = 300,
   batch_size=64,
-  validation_split = 0.2
+  validation_split = 0.2,
+  callbacks = callbacks_parameters
   )
 
 
@@ -826,7 +852,8 @@ model %>% compile(
 model %>% fit( # Usikker på om det er rett at begge skal ha den samme dataen!?
   # Mulig dette blir helt feil dimensjoner!
   list(gene.mod=xtrain,prot.mod=xtrain), ylabels,
-  epochs = 75, batch_size = 16, validation_split = 0.2
+  epochs = 300, batch_size = 16, validation_split = 0.2,
+  callbacks = callbacks_parameters
 )
 ```
 
