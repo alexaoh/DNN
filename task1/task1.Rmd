@@ -11,6 +11,8 @@ output:
     number_sections: true
     toc: true
     latex_engine: xelatex
+params: 
+  seed: 111
 ---
 
 ```{r setup, include=FALSE}
@@ -22,13 +24,12 @@ library(tidyverse)
 library(caret)
 library(ggplot2)
 
-set.seed(111)
+set.seed(params$seed)
 ```
 
 The objective of this task is to use information on protein abundance and gene expression of patients to predict the breast invasive carcinoma (BRCA) estrogen receptor status. 
 
 # Protein Abundance and Gene Expression Datasets
-
 
 ```{r, cache = T}
 gene.exp <- read_delim("gene_expression.csv", "\t", escape_double = FALSE, trim_ws = TRUE)
@@ -108,23 +109,22 @@ full.gene.prot.clin <- intersect(int.gene.full.prot, clinical$Sample)
 length(full.gene.prot.clin)
 ```
 
-The last intersection gives the intersection between the third list of patients (`int.gene.full.prot`) and the patients in the `clinical` dataset. Thus, this contains the unique list of patients that have all necessary data in all three datasets. Notice that these patients will be used to define the complete dataset, which will be used for the concatenated model later in the analysis. 
+The last intersection gives the intersection between the third list of patients (`int.gene.full.prot`) and the patients in the `clinical` dataset. Thus, this contains the unique list of patients that have all necessary data in all three datasets. Notice that these patients will be used to define the complete dataset, which will be used for the concatenated model later in the analysis (questions 7-10 in the task description). 
 
-As noted earlier, we will now only use the intersection `full.gene.clin`. Even though we know that all these patients have a recorded breast invasive carcinoma (BRCA) estrogen receptor status, we need to check that the values they have recorded are either `Positive` or `Negative`, keeping in mind the values we saw that the `clinical` dataset contains. Next, we remove all the individuals that don't have this information. 
+As noted earlier, we will now only use the intersection `full.gene.clin` (to answer questions 2-6 in the task description). Even though we know that all these patients have a recorded breast invasive carcinoma (BRCA) estrogen receptor status, we need to check that the values they have recorded are either `Positive` or `Negative`, keeping in mind the values we saw that the `clinical` dataset contains. Next, we remove all the individuals that don't have this information. 
 
 ```{r}
-chosen.data <-  full.gene.clin
+chosen.data <- full.gene.clin
 
 xclin <- clinical[,c(1,9)]
 colnames(xclin) <- c("Sample", "BRCA")
 xclin <- xclin[clinical$Sample %in% chosen.data, ] 
-#xprot <- prot.ab[prot.ab$Sample%in%chosen.data,]
 xgene <- gene.exp2[gene.exp2$Sample %in% chosen.data, ]
 
 sel1 <- which(xclin$BRCA != "Positive")
 sel2 <- which(xclin$BRCA != "Negative")
 sel <- intersect(sel1,sel2) # Find values of BRCA that are not negative or positive. 
-# In this case these values are either "Indeterminate" or "Not Performed".
+# In this case these values are either "Indeterminate", "Not Performed" or NA.
 xclin <- xclin[-sel,] # Remove the rows with non-valid data for BRCA. 
 xclin <- xclin[-which(is.na(xclin$BRCA)),] # Also remove rows with missing data for BRCA. 
 
@@ -134,11 +134,11 @@ mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
 
 ## Gene Expression Data
 
-From now on we only use the **gene expression data**. That's why we in the questions 2-6 will use the last mentioned set above which now consists of the patients that has both complete gene expression dataset and a data concerning their breast invasive carcinoma (BRCA) estrogen receptor status: positive or negative. (Later in question 7 and 8, the patients with complete data will be used, that is only using the set of patients that is also included in the protein abundance dataset, as mentioned earlier.)
+Again, it is stressed that we now only use the **gene expression data**, i.e. the first mentioned set above (`full.gene.clin`). After the last preprocess, this dataset now contains the patients that have the complete gene expression data, as well as a well-defined BRCA receptor status. In the later parts 
 
 ### Select the 25% of genes with the most variability.
 
-The 25% percent of genes with the most variability are chosen. Information about the genes chosen are stored and reused later in the selection of the genes for the other set in section 4 onwards, to make sure that the same set of genes that the network was trained with are the ones selected for that set as well. 
+The 25% percent of genes with the most variability are chosen. Information about the genes chosen are stored and reused later in the selection of the genes for the complete dataset in section 4 onwards, to make sure that the same set of genes (features) that the SAE was trained with are the ones selected in the complete dataset as well. 
 
 ```{r}
 percentage <- round(dim(mgene[,-c(1,2)])[[2]]*0.25) # Find how many variables correspond to 25%. 
@@ -152,7 +152,7 @@ The selected `r percentage` genes are used to implement a stacked autoencoder (S
 ## Final Training/Test Split
 
 ```{r}
-set.seed(111)
+set.seed(params$seed)
 training.fraction <- 0.70 # 70 % of data will be used for training. 
 training <- sample(1:nrow(mgene.lvar),nrow(mgene.lvar)*training.fraction) 
 
@@ -539,10 +539,7 @@ legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
 ```
 From the ROC curve we see that the AUC-score now is closer to 1, indicating that this is a better model.
 
-
 DENNE ER JO DÅRLIGERE. HVORDAN ORDNE OPP IT STOKASTISITET I TFRUNS + HER? HVILKEN VARIANT SOM ER BEST (5, 10 ELLER 20 NODER) VIRKER VELDIG TILFELDIG (OG AVHENGER OGSÅ STERKT AV HVOR MANGE VEKTER SOM FRYSES). I TILLEGG VIRKER DET IKKE SOM AT metric_val_acc ER ET GODT MÅL PÅ HVILKEN MODELL SOM GIR BEST RESULTATER, DA AUC OG ROC I FLERE TILFELLER VISER NOE ANNET. 
-
-??? Liv her, AUC nærmere 1 betyr jo at den er bedre? ... må huske å seede kanskje btw
 
 ## Complete Data 
 
@@ -551,7 +548,7 @@ The **complete data** (gene expression and protein abundance) is split into trai
 ATT LÄGGA IN VID DEN MOTSVARANDE KODEN: As explained in section 1, the same set of gene features is used in this dataset, in order to secure that the input now consists of the same genes that the network was trained on in previous sections. 
 
 ```{r}
-chosen.data <- full.gene.prot.clin # Change this definition after deciding which data set to use!
+chosen.data <- full.gene.prot.clin # Complete dataset, as defined in part 1. 
 xclin <- clinical[,c(1,9)]
 colnames(xclin) <- c("Sample", "BRCA")
 xclin <- xclin[clinical$Sample %in% chosen.data, ] 
@@ -561,7 +558,7 @@ xgene <- gene.exp2[gene.exp2$Sample %in% chosen.data, ]
 sel1 <- which(xclin$BRCA != "Positive")
 sel2 <- which(xclin$BRCA != "Negative")
 sel <- intersect(sel1,sel2) # Find values of BRCA that are not negative or positive. 
-# In this case these values are either "Indeterminate" or "Not Performed".
+# In this case these values are either "Indeterminate", "Not Performed" or NA. 
 xclin <- xclin[-sel,] # Remove the rows with non-valid data for BRCA. 
 xclin <- xclin[-which(is.na(xclin$BRCA)),] # Also remove rows with missing data for BRCA. 
 
@@ -570,44 +567,56 @@ mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
 mtot <- merge(mgene, xprot, by.x = "Sample", by.y = "Sample")
 #mtot <- xclin %>% left_join(xgene) %>% left_join(xprot, by = "Sample") # This gives the same result. 
 
-set.seed(111)
+mtot.patients <- mtot[,1]
+
+set.seed(params$seed)
 training.fraction <- 0.70 # 70 % of data will be used for training. 
 training <- sample(1:nrow(mtot),nrow(mtot)*training.fraction) 
 
-xtrain <- mtot[training,-c(1,2)]
-xtest <- mtot[-training,-c(1,2)]
+#xtrain <- mtot[training,-c(1,2)]
+#xtest <- mtot[-training,-c(1,2)]
 
 # Scaling for better numerical stability. 
 # This is a standard "subtract mean and divide by standard deviation" scaling. 
-xtrain <- scale(data.matrix(xtrain)) 
-xtest <- scale(data.matrix(xtest))
 
+#xtrain <- scale(data.matrix(xtrain)) 
+#xtest <- scale(data.matrix(xtest))
+
+# Pick out the same features as in the first model (as noted in section 1.1.1)
+#mtot.selected.genes <- xgene[, c(1,2,sorted)] # Select the 25% largest variance variables using the indices found in section 1.1.1.
 # Pick out labels for train and test set. 
-ytrain <- mgene.lvar[training,2]
-ytest <- mgene.lvar[-training,2]
+#ytrain <- mtot.lvar[training,2]
+#ytest <- mtot.lvar[-training,2]
 
 # Change labels to numerical values in train and test set. 
-ylabels <- c()
-ylabels[ytrain=="Positive"] <- 1
-ylabels[ytrain=="Negative"] <- 0
+#ylabels <- c()
+#ylabels[ytrain=="Positive"] <- 1
+#ylabels[ytrain=="Negative"] <- 0
 
-ytestlabels <- c()
-ytestlabels[ytest=="Positive"] <- 1
-ytestlabels[ytest=="Negative"] <- 0
+#ytestlabels <- c()
+#ytestlabels[ytest=="Positive"] <- 1
+#ytestlabels[ytest=="Negative"] <- 0
 ```
 
 ```{r}
-xprot_train <- xprot[training,-c(1,2)]
-xgene_train <- xgene[training,-c(1,2)]
-xprot_test <- xprot[-training,-c(1,2)]
-xgene_test <- xgene[-training,-c(1,2)]
+xprot2 <- xprot %>% dplyr::filter(Sample %in% mtot.patients)
+xprot.train<- xprot2[training, -1]
+xprot.test <- xprot2[-training, -1]
 
+xgene2 <- xgene %>% dplyr::filter(Sample %in% mtot.patients)
+
+# Pick out the same features as in the first model (as noted in section 1.1.1)
+xgene2 <- xgene2[, sorted] # Select the 25% largest variance variables using the indices found in section 1.1.1.
+xgene.train <- xgene2[training,-1]
+xgene.test <- xgene2[-training,-1]
+
+# Denne er åpenbart feil!!! Fiks denne nå, så er alt i orden!!
 ytrain_bin <- to_categorical(as.array(ylabels), 2)
 ```
 
-The SAE for the abundance of proteins (from class examples) is added in the code block below. Then, this model is concatenated with the former model, that was trained on the gene expression data. 
-
 ## Importing the SAE from the class example.
+
+The SAE for the abundance of proteins (from class examples) is added in the code block below. Then, this model is concatenated with the former model, that was trained on the gene expression data. 
 
 How I understood it: in the file aes_practice_3.R there is a SAE model that we can use for the breast stuff. We need to import this model and concatenate it with the one we created for gene expression.
 
