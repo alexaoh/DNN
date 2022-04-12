@@ -315,7 +315,7 @@ callbacks_parameters <- callback_early_stopping(
 sae2 %>% fit(
   x = encoded_expression1,
   y = encoded_expression1,
-  epochs = 70,
+  epochs = 100,
   batch_size = 64,
   validation_split = 0.2,
   callbacks = callbacks_parameters
@@ -458,7 +458,7 @@ sae %>% compile(
 sae %>% fit(
   x=xtrain,
   y=ylabels,
-  epochs = 80,
+  epochs = 120,
   batch_size=64,
   validation_split = 0.2,
   callbacks = callbacks_parameters
@@ -600,18 +600,39 @@ training <- sample(1:nrow(mtot),nrow(mtot)*training.fraction)
 
 ```{r}
 xprot2 <- xprot %>% dplyr::filter(Sample %in% mtot.patients)
-xprot.train<- xprot2[training, -1]
-xprot.test <- xprot2[-training, -1]
+xprot.train <- xprot2[training,-1]
+xprot.test <- xprot2[-training,-1]
 
 xgene2 <- xgene %>% dplyr::filter(Sample %in% mtot.patients)
 
 # Pick out the same features as in the first model (as noted in section 1.1.1)
 xgene2 <- xgene2[, sorted] # Select the 25% largest variance variables using the indices found in section 1.1.1.
-xgene.train <- xgene2[training,-1]
-xgene.test <- xgene2[-training,-1]
+#xgene.train <- xgene2[training,-1]
+#xgene.test <- xgene2[-training,-1]
+# Ändrar dessa 
+xgene.train <- xgene2[training,]
+xgene.test <- xgene2[-training,]
 
+# OLD:
 # Denne er åpenbart feil!!! Fiks denne nå, så er alt i orden!!
-ytrain_bin <- to_categorical(as.array(ylabels), 2)
+# ytrain_bin <- to_categorical(as.array(ylabels), 2)
+
+# NEW try below:
+# Pick out labels for train and test set. 
+ytrain <- mgene.lvar[training,2]
+ytest <- mgene.lvar[-training,2]
+
+# Change labels to numerical values in train and test set. 
+ylabels <- c()
+ylabels[ytrain=="Positive"] <- 1
+ylabels[ytrain=="Negative"] <- 0
+
+ytestlabels <- c()
+ytestlabels[ytest=="Positive"] <- 1
+ytestlabels[ytest=="Negative"] <- 0
+
+yLabelsStored <- ylabels
+
 ```
 
 ## Importing the SAE from the class example.
@@ -632,9 +653,14 @@ In this section we concatenate the two SAEs to fit, on the trainset, a DNN that 
 
 ```{r}
 concatenated<-layer_concatenate(list(sae_output2,sae_protab_output))
+#concatenated<-layer_concatenate(list(sae_output,sae_protab_output))
+#model_output<-concatenated %>% 
+#  layer_dense(20,"relu") %>% 
+#  layer_dense(units=1,activation="softmax")
+# Ändrar till sigmoid istället
 model_output<-concatenated %>% 
   layer_dense(20,"relu") %>% 
-  layer_dense(units=1,activation="softmax")
+  layer_dense(units=1,activation="sigmoid")
 
 model<-keras_model(list(sae_input,sae_protab_input), model_output)
 summary(model)
@@ -644,16 +670,38 @@ summary(model)
 ```{r, eval = F}
 model %>% compile(
   optimizer = "rmsprop",
-  loss = "categorical_crossentropy",
+  loss = "binary_crossentropy",
   metrics = "acc"
 )
+#optimizer = "opt",
+# loss = "categorical_crossentropy",
 
+# OLD:
 # training 
 #Den her funker ikke. Jeg tror det er fordi xgene_train har 17000 ish kolonner. Den burde egentlig ha typ 4454 eller noe liknende. Må se litt på datarensing. (kan også hende jeg har gjort ting helt feil i tillegg)
+#model %>% fit(
+#  list(gene.mod=xgene_train, prot.mod=xprot_train), as.array(yLabelsStored),
+#  epochs = 75, batch_size = 64, validation_split = 0.2
+#)
+
+
 model %>% fit(
-  list(gene.mod=xgene_train, prot.mod=xprot_train), as.array(ylabels),
-  epochs = 75, batch_size = 64, validation_split = 0.2
+  x=list(as.matrix(xgene.train),as.matrix(xprot.train)),
+  y=as.matrix(yLabelsStored),
+  epochs = 200,
+  batch_size=64,
+  validation_split = 0.2,
+  callbacks = callbacks_parameters
 )
+
+#model %>% fit(
+#  x=list(xgene.train,xprot.train),
+#  y=as.matrix(yLabelsStored),
+#  epochs = 80,
+#  batch_size=64,
+#  validation_split = 0.2,
+#  callbacks = callbacks_parameters
+#)
 
 ```
 
