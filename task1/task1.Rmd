@@ -47,7 +47,7 @@ dim(prot.ab)
 all(complete.cases(prot.ab)) # TRUE: There are no missing values. 
 ```
 
-The protein abundance dataset has no missing values. It contains 410 unique patients, where each patient has its own sampling code and a numerical value that gives the abundance of 142 different proteins. 
+The protein abundance dataset has no missing values. It contains 410 unique patients, where each patient has their own sampling code and a numerical value that gives the abundance of 142 different proteins. 
 
 The dimensions of the gene expression dataset are shown below. 
 
@@ -67,9 +67,9 @@ gene.exp2 <- gene.exp[complete.cases(gene.exp),]
 dim(gene.exp2)
 ```
 
-Before the rows with missing values are removed, the gene expression data contains `r dim(gene.exp)[[1]]` unique patients, each of which has its own sampling code. After the rows with missing data are removed, the gene expression data contains `r dim(gene.exp2)[[1]]` unique patients. 
+Before the rows with missing values are removed, the gene expression data contains `r dim(gene.exp)[[1]]` unique patients, each of which has their own sampling code. After the rows with missing data are removed, the gene expression data contains `r dim(gene.exp2)[[1]]` unique patients. 
 
-Next we find which patients have data of both types available, keeping in mind that the response we want to predict is contained in the `clinical` data. Before continuing, note that the `clinical` data has the following dimensions
+Next we find the patients with data of both types available, keeping in mind that the response we want to predict is contained in the `clinical` data. Before continuing, note that the `clinical` data has the following dimensions
 
 ```{r}
 dim(clinical)
@@ -88,7 +88,7 @@ full.gene.clin <- intersect(gene.exp2$Sample, clinical$Sample)
 length(full.gene.clin)
 ```
 
-The first intersection that is shown is the intersection between the gene expression data with no missing values and the clinical data, i.e. this intersection now contains all unique patient identifiers that exist in the gene data and have recorded the response. Notice that this the data that will be used in the first part of the task. 
+The first intersection that is shown is the intersection between the gene expression data with no missing values and the clinical data, i.e. this intersection now contains all unique patient identifiers that exist in the gene data and that have recorded the response. Notice that this the data that will be used in the first part of the task. 
 
 ```{r}
 int.gene.prot <- intersect(gene.exp$Sample, prot.ab$Sample) 
