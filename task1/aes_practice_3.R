@@ -122,8 +122,8 @@ output_enc<-input_enc %>%
   layer_dense(units=50,activation="relu") %>%
   layer_dense(units=20,activation="relu")
 
-encoder = keras_model(input_enc, output_enc)
-summary(encoder)
+prot_encoder = keras_model(input_enc, output_enc)
+summary(prot_encoder)
 
 
 ## ---------------------------------------------------------------------------------
@@ -140,7 +140,7 @@ summary(decoder)
 ## ---------------------------------------------------------------------------------
 aen_input = layer_input(shape = 142)
 aen_output = aen_input %>% 
-  encoder() %>% 
+  prot_encoder() %>% 
   decoder()
 
 aen = keras_model(aen_input, aen_output)
@@ -165,8 +165,8 @@ aen %>% fit(
 
 
 ## ---------------------------------------------------------------------------------
-#Generating with Autoencoder
-encoded_expression <- encoder %>% predict(as.matrix(xtrain))
+#Generating with Autoprot_encoder
+encoded_expression <- prot_encoder %>% predict(as.matrix(xtrain))
 decoded_expression <- decoder %>% predict(encoded_expression)
 
 
@@ -179,8 +179,8 @@ heatmap(encoded_expression,  RowSideColors=as.character(ylabels) , col=colMain, 
 input_enc1<-layer_input(shape = 142)
 output_enc1<-input_enc1 %>% 
   layer_dense(units=50,activation="relu") 
-encoder1 = keras_model(input_enc1, output_enc1)
-summary(encoder1)
+prot_encoder1 = keras_model(input_enc1, output_enc1)
+summary(prot_encoder1)
 
 
 ## ---------------------------------------------------------------------------------
@@ -196,7 +196,7 @@ summary(decoder1)
 ## ---------------------------------------------------------------------------------
 aen_input1 = layer_input(shape = 142)
 aen_output1 = aen_input1 %>% 
-  encoder1() %>% 
+  prot_encoder1() %>% 
   decoder1()
 
 sae_protab1 = keras_model(aen_input1, aen_output1)
@@ -221,16 +221,16 @@ sae_protab1 %>% fit(
 
 
 ## ---------------------------------------------------------------------------------
-#Generating with Autoencoder
-encoded_expression1 <- encoder1 %>% predict(as.matrix(xtrain))
+#Generating with Autoprot_encoder
+encoded_expression1 <- prot_encoder1 %>% predict(as.matrix(xtrain))
 
 
 ## ---------------------------------------------------------------------------------
 input_enc2<-layer_input(shape = 50)
 output_enc2<-input_enc2 %>% 
   layer_dense(units=20,activation="relu") 
-encoder2 = keras_model(input_enc2, output_enc2)
-summary(encoder2)
+prot_encoder2 = keras_model(input_enc2, output_enc2)
+summary(prot_encoder2)
 
 
 ## ---------------------------------------------------------------------------------
@@ -246,7 +246,7 @@ summary(decoder2)
 ## ---------------------------------------------------------------------------------
 aen_input2 = layer_input(shape = 50)
 aen_output2 = aen_input2 %>% 
-  encoder2() %>% 
+  prot_encoder2() %>% 
   decoder2()
 
 sae_protab2 = keras_model(aen_input2, aen_output2)
@@ -271,16 +271,16 @@ sae_protab2 %>% fit(
 
 
 ## ---------------------------------------------------------------------------------
-#Generating with Autoencoder
-encoded_expression2 <- encoder2 %>% predict(as.matrix(encoded_expression1))
+#Generating with Autoprot_encoder
+encoded_expression2 <- prot_encoder2 %>% predict(as.matrix(encoded_expression1))
 
 
 ## ---------------------------------------------------------------------------------
 input_enc3<-layer_input(shape = 20)
 output_enc3<-input_enc3 %>% 
   layer_dense(units=10,activation="relu") 
-encoder3 = keras_model(input_enc3, output_enc3)
-summary(encoder3)
+prot_encoder3 = keras_model(input_enc3, output_enc3)
+summary(prot_encoder3)
 
 
 ## ---------------------------------------------------------------------------------
@@ -296,7 +296,7 @@ summary(decoder3)
 ## ---------------------------------------------------------------------------------
 aen_input3 = layer_input(shape = 20)
 aen_output3 = aen_input3 %>% 
-  encoder3() %>% 
+  prot_encoder3() %>% 
   decoder3()
 
 sae_protab3 = keras_model(aen_input3, aen_output3)
@@ -321,17 +321,19 @@ sae_protab3 %>% fit(
 
 
 ## ---------------------------------------------------------------------------------
-#Generating with Autoencoder
-encoded_expression3 <- encoder3 %>% predict(as.matrix(encoded_expression2))
+#Generating with Autoprot_encoder
+encoded_expression3 <- prot_encoder3 %>% predict(as.matrix(encoded_expression2))
 
 
 ## ---------------------------------------------------------------------------------
 sae_protab_input = layer_input(shape = 142, name = "prot.mod")
 sae_protab_output = sae_protab_input %>% 
-  encoder1() %>% 
-  encoder2()  %>%
-  encoder3() %>%
-  layer_dense(5,activation = "relu")%>%
+  prot_encoder1() %>% 
+  prot_encoder2()  %>%
+  prot_encoder3() %>%
+  #layer_dense(5,activation = "relu")%>%
+  #Changed this in order to have a layer_dense thing of 20
+  layer_dense(20,activation = "relu")%>%
   layer_dense(1,activation = "sigmoid")
 
 sae_protab = keras_model(sae_protab_input, sae_protab_output)

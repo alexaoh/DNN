@@ -81,7 +81,7 @@ and we only care about columns 1 and 9. Column 1 contains the identifier of each
 unique(clinical[,9])
 ```
 
-These values will be preprocessed later. Below the code used to find patients that have data available is given. 
+These values will be pre-processed later. Below the code used to find patients that have data available is given. 
 
 ```{r}
 full.gene.clin <- intersect(gene.exp2$Sample, clinical$Sample)
@@ -109,7 +109,7 @@ full.gene.prot.clin <- intersect(int.gene.full.prot, clinical$Sample)
 length(full.gene.prot.clin)
 ```
 
-The last intersection gives the intersection between the third list of patients (`int.gene.full.prot`) and the patients in the `clinical` dataset. Thus, this contains the unique list of patients that have all necessary data in all three datasets. Notice that these patients will be used to define the complete dataset, which will be used for the concatenated model later in the analysis (questions 7-10 in the task description). 
+The last intersection gives the intersection between the third list of patients (`int.gene.full.prot`) and the patients in the `clinical` data set. Thus, this contains the unique list of patients that have all necessary data in all three data sets. Notice that these patients will be used to define the complete data set, which will be used for the concatenated model later in the analysis (questions 7-10 in the task description). 
 
 As noted earlier, we will now only use the intersection `full.gene.clin` (to answer questions 2-6 in the task description). Even though we know that all these patients have a recorded breast invasive carcinoma (BRCA) estrogen receptor status, we need to check that the values they have recorded are either `Positive` or `Negative`, keeping in mind the values we saw that the `clinical` dataset contains. Next, we remove all the individuals that don't have this information. 
 
@@ -134,11 +134,11 @@ mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
 
 ## Gene Expression Data
 
-Again, it is stressed that we now only use the **gene expression data**, i.e. the first mentioned set above (`full.gene.clin`). After the last preprocess, this dataset now contains the patients that have the complete gene expression data, as well as a well-defined BRCA receptor status. In the later parts 
+Again, it is stressed that we now only use the **gene expression data**, i.e. the first mentioned set above (`full.gene.clin`). After the previous pre-process, this data set now contains the patients that have the complete gene expression data, as well as a well-defined BRCA receptor status.
 
 ### Select the 25% of genes with the most variability.
 
-The 25% percent of genes with the most variability are chosen. Information about the genes chosen are stored and reused later in the selection of the genes for the complete dataset in section 4 onwards, to make sure that the same set of genes (features) that the SAE was trained with are the ones selected in the complete dataset as well. 
+The 25% percent of genes with the most variability are chosen. Information about the genes chosen are stored and reused later in the selection of the genes for the complete data set in section 4 and onwards, to make sure that the same set of genes (features) that the SAE was trained with are the ones selected in the complete data (set as well. 
 
 ```{r}
 percentage <- round(dim(mgene[,-c(1,2)])[[2]]*0.25) # Find how many variables correspond to 25%. 
@@ -259,7 +259,7 @@ vcor <- diag(cor(x.hat,xtrain))
 hist(vcor, main = "Correlation on Training Data")
 ```
 
-The histogram above shows that the correlation between the training data and the predictions from the first autoencoder are relatively high. Worth menitioning is that if we had not implemented the training stop when no progression of the validation data was registered, the correlation on the training set would be significantly higher, as the network would continue to fit the parameters to the training data. As stated, this would probably have resulted in worse values for the initial test set that we set aside before the training started. We do the same check on the test set. 
+The histogram above shows that the correlation between the training data and the predictions from the first autoencoder are relatively high. Worth mentioning is that if we had not implemented the training stop when no progression of the validation data was registered, the correlation on the training set would be significantly higher, as the network would continue to fit the parameters to the training data. As stated, this would probably have resulted in worse values for the initial test set that we set aside before the training started. We do the same check on the test set. 
 
 ```{r}
 x.hat <- predict(sae1,xtest)
@@ -409,7 +409,7 @@ The histogram above shows that there is some correlation between the input and t
 
 ## Final Model (SAE)
 
-The final stacked autoencoder (SAE) is constructed below. All the encoders are stacked previously trained are stacked together. 
+The final stacked autoencoder (SAE) is constructed below. All the encoders previously trained are stacked together. 
 
 ```{r}
 sae_input <- layer_input(shape = percentage, name = "gene.mod")
@@ -490,13 +490,13 @@ plot(roc_sae_test, col = "blue", print.auc=TRUE)
 legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
 ```
 
-As is seen above, the AUC is `r round(roc_sae_test$auc, 2)`. COMMENTS / INTERPRETATIONS!
+As is seen above, the AUC is `r round(roc_sae_test$auc, 2)`.
 
 For an AUC curve, a score of 1 would signify a perfect predictor whilst a score of 0.5 would signify that the predictor is just as good as a random generator (i.e. equivalent to flipping a coin). A score of `r round(roc_sae_test$auc, 2)` is therefore considered acceptable as it should be able to distinguish the various cases to some extent, however there is big room for improvement.
 
 # Use `tfruns` to Explore Configurations of First Fully Connected Layer
 
-In this section, `tfruns` is used to explore what amount of nodes in the first layer of the DNN gives the best performance. We are asked to search among three different numbers; 5, 10 and 20. The code used with `tfruns` is given in separate R files. Anyhow, the exploration leads to the conclusion that the configuration with 20 nodes gives the best results. 
+In this section, `tfruns` is used to explore what amount of nodes in the first layer of the DNN gives the best performance. We are asked to search among three different numbers; 5, 10 and 20. The code used with `tfruns` is given in separate R files. The exploration leads to the conclusion that the configuration with 20 nodes gives the best results. 
 
 Thus, the final model is
 
@@ -539,13 +539,11 @@ legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
 ```
 From the ROC curve we see that the AUC-score now is closer to 1, indicating that this is a better model.
 
-DENNE ER JO DÅRLIGERE. HVORDAN ORDNE OPP IT STOKASTISITET I TFRUNS + HER? HVILKEN VARIANT SOM ER BEST (5, 10 ELLER 20 NODER) VIRKER VELDIG TILFELDIG (OG AVHENGER OGSÅ STERKT AV HVOR MANGE VEKTER SOM FRYSES). I TILLEGG VIRKER DET IKKE SOM AT metric_val_acc ER ET GODT MÅL PÅ HVILKEN MODELL SOM GIR BEST RESULTATER, DA AUC OG ROC I FLERE TILFELLER VISER NOE ANNET. 
-
 ## Complete Data 
 
 The **complete data** (gene expression and protein abundance) is split into train and test sets. 
 
-ATT LÄGGA IN VID DEN MOTSVARANDE KODEN: As explained in section 1, the same set of gene features is used in this dataset, in order to secure that the input now consists of the same genes that the network was trained on in previous sections. 
+As explained in section 1, the same set of gene features is used in this dataset, in order to secure that the input now consists of the same genes that the network was trained on in previous sections. 
 
 ```{r}
 chosen.data <- full.gene.prot.clin # Complete dataset, as defined in part 1. 
@@ -639,7 +637,6 @@ yLabelsStored <- ylabels
 
 The SAE for the abundance of proteins (from class examples) is added in the code block below. Then, this model is concatenated with the former model, that was trained on the gene expression data. 
 
-How I understood it: in the file aes_practice_3.R there is a SAE model that we can use for the breast stuff. We need to import this model and concatenate it with the one we created for gene expression.
 
 ```{r}
 # Model given in class. 
@@ -651,23 +648,44 @@ source("aes_practice_3.R") # source: Parses the code and evaluates it in this en
 
 In this section we concatenate the two SAEs to fit, on the trainset, a DNN that integrates both data sources to predict estrogen receptor status. The DNN has a dense layer, with 20 nodes, which where the best amount of nodes found with `tfruns` earlier, in addition to the output layer. 
 
+The two models are concatenated below. 
+
 ```{r}
+
+
+
+sae_output2 <- sae_input %>% 
+  encoder1() %>% 
+  encoder2() %>%
+  encoder3()
+  layer_dense(units=20, activation = "relu")
+
+sae_protab_output <- sae_protab_input %>%
+  prot_encoder1() %>% 
+  prot_encoder2()  %>%
+  prot_encoder3() %>%
+  layer_dense(units=20, activation = "relu")
+
+
 concatenated<-layer_concatenate(list(sae_output2,sae_protab_output))
 #concatenated<-layer_concatenate(list(sae_output,sae_protab_output))
 #model_output<-concatenated %>% 
 #  layer_dense(20,"relu") %>% 
 #  layer_dense(units=1,activation="softmax")
 # Ändrar till sigmoid istället
-model_output<-concatenated %>% 
-  layer_dense(20,"relu") %>% 
-  layer_dense(units=1,activation="sigmoid")
+model_output<-concatenated %>%
+  #layer_dense(units=2,activation="softmax") %>%
+  #layer_dense(20,"relu") %>%
+  #layer_dense(units=20,activation="relu") #%>%
+  #layer_dense(units=1,activation="sigmoid")
+  layer_dense(units=2,activation="softmax")
 
 model<-keras_model(list(sae_input,sae_protab_input), model_output)
 summary(model)
 ```
 
 
-```{r, eval = F}
+```{r}
 model %>% compile(
   optimizer = "rmsprop",
   loss = "binary_crossentropy",
@@ -687,12 +705,14 @@ model %>% compile(
 
 model %>% fit(
   x=list(as.matrix(xgene.train),as.matrix(xprot.train)),
-  y=as.matrix(yLabelsStored),
-  epochs = 200,
+  y=as.matrix(to_categorical(yLabelsStored,2)),
+  epochs = 75,
   batch_size=64,
-  validation_split = 0.2,
-  callbacks = callbacks_parameters
+  validation_split = 0.2#,
+  #callbacks = callbacks_parameters
 )
+
+#CHECK: do we need callbacks here?
 
 #model %>% fit(
 #  x=list(xgene.train,xprot.train),
@@ -705,62 +725,49 @@ model %>% fit(
 
 ```
 
+```{r, eval=F}
 
-KODEN NEDENFOR FUNGERER IKKE AKKURAT NÅ, USIKKER PÅ HVORFOR DEN FAILER. 
+#This part is not working.
+# training_on_batch
 
-Liv her: jeg tror den failer pga denne SAE skal kun brukes på protein abundance greia. Egt ville det beste vært om vi kunne eksportert modellen fra scriptet til læreren, siden det er nøyaktig det vi skal bruke. Hvis ikke burde vi ikke definere xtrain som noe nytt.
+#for(i in 1:100){
+  
+  #sel1<-sample(1:40,16)
+#  sel1<-sample(1:123,32,replace=T)
+#  batchdata1<-xgene.train[sel1,,1]
+#  batchdata1<-array_reshape(batchdata1,dim=c(32,percentage,1))
+#  batchdata2<-xprot.train[sel1,,1]
+#  batchdata2<-array_reshape(batchdata2,dim=c(32,142,1))
+#  combined<-list(xgene.train,xprot.train)
+#  batch.y<-yLabelsStored[c(sel1),]
+  
+  
+#  dloss<-model %>% train_on_batch(combined, batch.y)
+#  print(dloss)
+  
+  
+#}
 
-
-The two models are concatenated below. CHECK THAT THIS IS DONE CORRECTLY LATER!
-SKAL DENSE LAYERS LEGGES TIL I DEN KONKATENERTE MODELLEN ELLER I HVER AV DE TO MODELLENE FØR DE KONKATINERES (SLIK DET ER GJORT NÅ)?
-
-
-
-
-```{r, eval = F}
-concatenated<-layer_concatenate(list(sae_output2,sae_output.prot))
-model_output<-concatenated %>% 
-  layer_dense(units=2,activation = "softmax")
-
-model<-keras_model(list(sae_input,sae_output.prot), model_output)
-summary(model)
 ```
 
-The model is compiled and trained below. 
-
-```{r, eval = F}
-model %>% compile(
-  optimizer = "rmsprop",
-  loss = "categorical_crossentropy",
-  metrics = "acc"
-)
-
-
-# training 
-
-model %>% fit( # Usikker på om det er rett at begge skal ha den samme dataen!?
-  # Mulig dette blir helt feil dimensjoner!
-  list(gene.mod=xtrain,prot.mod=xtrain), ylabels,
-  epochs = 60, batch_size = 16, validation_split = 0.2,
-  callbacks = callbacks_parameters
-)
-```
 
 ## Performance Metrics
 
 The model is evaluated on the test set below.  
 
 ```{r, eval = F}
+#This is not working due to ytestlabels having different dimensions from xgenetest and xprotest
 model %>%
-  evaluate(xtest, ytestlabels)
+  evaluate(x=list(as.matrix(xgene.test),as.matrix(xprot.test)),
+  y=as.matrix(to_categorical(ytestlabels,2)),)
 ```
 
 <!-- Predictions on the test set are calculated. The classifier is built on the assumption that predictions of probability smaller than $0.5$ are negative receptor states, while probabilities larger than $0.5$ are positive receptor states. The confusion matrix of the predictions is shown below.  -->
 
 ```{r, eval = F}
-yhat <- predict(model,xtest)
+yhat <- predict(model,list(as.matrix(xgene.test),as.matrix(xprot.test)))
 yhatclass<-as.factor(ifelse(yhat<0.5,0,1))
-confusionMatrix(yhatclass,as.factor(ytestlabels))
+confusionMatrix(yhatclass,as.factor(to_categorical(ytestlabels,2)))
 ```
 
 The ROC curve is shown below. 
