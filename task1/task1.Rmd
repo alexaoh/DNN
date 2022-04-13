@@ -5,7 +5,7 @@ author: "Liv Breivik, Hannes Johansson, Alexander J Ohrt"
 date: "`r format(Sys.time(), '%d. %b. %Y')`"
 output: 
    html_document:
-    code_folding: show
+    code_folding: hide
     theme: yeti
     highlight: textmate
     number_sections: true
@@ -16,7 +16,7 @@ params:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, comment = "#>")
+knitr::opts_chunk$set(echo = TRUE, comment = "#>", warning = F)
 library(keras)
 library(readr)
 library(pROC)
@@ -47,7 +47,7 @@ dim(prot.ab)
 all(complete.cases(prot.ab)) # TRUE: There are no missing values. 
 ```
 
-The protein abundance data set has no missing values. It contains 410 unique patients, where each patient has their own sampling code and a numerical value that gives the abundance of 142 different proteins. 
+The protein abundance data set has no missing values. It contains 410 unique patients, where each patient has their own sampling code and a numerical value that gives the abundance of each of 142 different proteins. 
 
 The dimensions of the gene expression data set are shown below. 
 
@@ -88,7 +88,7 @@ full.gene.clin <- intersect(gene.exp2$Sample, clinical$Sample)
 length(full.gene.clin)
 ```
 
-The first intersection that is shown is the intersection between the gene expression data with no missing values and the clinical data, i.e. this intersection now contains all unique patient identifiers that exist in the gene data and that have recorded the response. Notice that this the data that will be used in the first part of the task. 
+The first intersection that is shown is the intersection between the gene expression data with no missing values and the clinical data, i.e. this intersection now contains all unique patient identifiers that exist in the gene data and that have recorded the response. Notice that this data that will be used during the entire first part of the task. 
 
 ```{r}
 int.gene.prot <- intersect(gene.exp$Sample, prot.ab$Sample) 
@@ -138,7 +138,7 @@ Again, it is stressed that we now only use the **gene expression data**, i.e. th
 
 ### Select the 25% of genes with the most variability.
 
-The 25% percent of genes with the most variability are chosen. Information about the genes chosen are stored and reused later in the selection of the genes for the complete data set in section 4 and onwards, to make sure that the same set of genes (features) that the SAE was trained with are the ones selected in the complete data set as well. 
+The 25% percent of genes with the most variability are chosen. Information about the genes chosen is stored and reused later in the selection of the genes for the complete data set in section 4 and onwards, to make sure that the same set of genes (features) that the SAE was trained on are the ones selected in the complete data set as well. In other words; we will use the same set of genes as explanatory variables in both parts of this task. 
 
 ```{r}
 percentage <- round(dim(mgene[,-c(1,2)])[[2]]*0.25) # Find how many variables correspond to 25%. 
@@ -156,6 +156,8 @@ set.seed(params$seed)
 training.fraction <- 0.70 # 70 % of data will be used for training. 
 training <- sample(1:nrow(mgene.lvar),nrow(mgene.lvar)*training.fraction) 
 
+# Remove "Sample" and "BRCA" from train and test set. 
+# Select rows according to sample above. 
 xtrain <- mgene.lvar[training,-c(1,2)]
 xtest <- mgene.lvar[-training,-c(1,2)]
 
@@ -213,7 +215,7 @@ sae1 <- keras_model(aen_input1, aen_output1)
 summary(sae1)
 ```
 
-We compile the model and fit it to the training data. To decide the final number of epochs each 'val-loss'-value is regarded after each epoch. If the value has not decreased in a certain number of epochs the training will stop. This is to reduce the risk of overfitting the network, that is that the network may otherwise learn patterns that are too specific for the training data while the performance on the actual validation data begins to decrease. 
+We compile the model and fit it to the training data. To decide the final number of epochs each "val_loss"-value (i.e. the validation loss) is regarded after each epoch. If the value has not decreased in a certain number of epochs the training will stop. This is done using the `Keras Callbacks API`, The point is to reduce the risk of overfitting the network, i.e. improve generalization. Overfitting is a central problem in ML; which could be manifested by the network learning specific patterns or details in the training data, which is not found in new data, which would lead to decreasing performance on validation data. 
 
 ```{r comp}
 sae1 %>% compile(
@@ -259,7 +261,7 @@ vcor <- diag(cor(x.hat,xtrain))
 hist(vcor, main = "Correlation on Training Data")
 ```
 
-The histogram above shows that the correlation between the training data and the predictions from the first autoencoder are relatively high. Worth mentioning is that if we had not implemented the training stop when no progression of the validation data was registered, the correlation on the training set would be significantly higher, as the network would continue to fit the parameters to the training data. As stated, this would probably have resulted in worse values for the initial test set that we set aside before the training started. We do the same check on the test set. 
+The histogram above shows that the correlation between the training data and the predictions from the first autoencoder are relatively high. Worth mentioning is that if the network is trained without the aforementioned callbacks, the correlation on the training set could be higher, as the network could continue to fit the parameters to the training data. As stated, this would probably have resulted in worse values for the initial test set that we set aside before the training started. We do the same check on the test set. 
 
 ```{r}
 x.hat <- predict(sae1,xtest)
@@ -322,25 +324,25 @@ sae2 %>% fit(
 )
 ```
 
-We make predictions on the training data, which in this case is the training data reduced in dimension from the first autoencoder. Also here we use the automatic training stop when the performance on the validation set has stopped improving.
+We make predictions on the training data, which in this case is the training data reduced in dimension from the first autoencoder. Similarly to earlier, we use callbacks for early stopping during training.
 
 ```{r}
 encoded_expression2 <- encoder2 %>% predict(encoded_expression1) 
 decoded_expression2 <- decoder2 %>% predict(encoded_expression2)
 
 # This method gives the same predictions as the two lines above. 
-# i.e. the values in decoded_expression above are the same as the values in x.hat below. 
+# i.e. the values in decoded_expression2 above are the same as the values in x.hat below. 
 x.hat <- predict(sae2,encoded_expression1)
 ```
 
-Some (weak) evidence of the quality of the coding obtained follows. Now we plot the correlation between the predictions from the autoencoder and the input data, which in this case is the encoded data from the first autoencoder (the latent variables/space). 
+Some (weak) evidence of the quality of the coding obtained follows. We plot the correlation between the predictions from the autoencoder and the input data, which in this case is the encoded data from the first autoencoder (the latent variables/space). 
 
-```{r}
+```{r, warning = F}
 vcor <- diag(cor(x.hat,encoded_expression1))
 hist(vcor, main = "Correlation with Input Data (Encoded from sae1)")
 ```
 
-The histogram above shows that there is correlation between the input and the predictions from the second autoencoder. Note that we do not have a test set in this case, since the dimension of the output data from sae2 is 1000, which is less than the amount of features in the test data. Since the histogram shows the correlation between the input and the predictions the diagram is highly dependent on how many epochs the network is trained.
+The histogram above shows that there is correlation between the input and the predictions from the second autoencoder. Note that we do not have a test set in this case, since the dimension of the output data from sae2 is 1000, which is less than the amount of features in the test data. Since the histogram shows the correlation between the input and the predictions, the diagram is highly dependent on how many epochs the network is trained for (as is always the case in Deep Learning with neural networks). 
 
 ## Third Layer (50 nodes)
 ```{r}
@@ -380,36 +382,36 @@ sae3 %>% compile(
 sae3 %>% fit(
   x = encoded_expression2,
   y = encoded_expression2,
-  epochs = 220,
+  epochs = 150,
   batch_size = 64,
   validation_split = 0.2,
   callbacks = callbacks_parameters
 )
 ```
 
-We make predictions on the training data, which in this case is the training data reduced in dimension from the first autoencoder.  
+We make predictions on the training data, which in this case is the training data reduced in dimension from the second autoencoder.  
 
 ```{r}
 encoded_expression3 <- encoder3 %>% predict(encoded_expression2) 
 decoded_expression3 <- decoder3 %>% predict(encoded_expression3)
 
 # This method gives the same predictions as the two lines above. 
-# i.e. the values in decoded_expression above are the same as the values in x.hat below. 
+# i.e. the values in decoded_expression3 above are the same as the values in x.hat below. 
 x.hat <- predict(sae3,encoded_expression2)
 ```
 
-Some (weak) evidence of the quality of the coding obtained follows. Now we plot the correlation between the predictions from the autoencoder and the input data, which in this case is the encoded data from the first autoencoder (the latent variables/space). 
+Some (weak) evidence of the quality of the coding obtained follows. We plot the correlation between the predictions from the autoencoder and the input data, which in this case is the encoded data from the second autoencoder (the latent variables/space). 
 
 ```{r}
 vcor <- diag(cor(x.hat,encoded_expression2))
 hist(vcor, main = "Correlation with Input Data (Encoded from sae2)")
 ```
 
-The histogram above shows that there is correlation between the input and the predictions from the second autoencoder. Note that we do not have a test set in this case, since the dimension of the output data from sae3 is 100, which is less than the amount of features in the test data. Also here the numbers of epochs runned will highly effect the correlation.
+The histogram above shows that there is correlation between the input and the predictions from the second autoencoder. Note that we (again) do not have a test set in this case, since the dimension of the output data from sae3 is 100, which is less than the amount of features in the test data.
 
 ## Final Model (SAE)
 
-The final stacked autoencoder (SAE) is constructed below. All the encoders previously trained are stacked together. 
+The final stacked autoencoder (SAE) is constructed below; all the encoders previously trained are stacked together. 
 
 ```{r}
 sae_input <- layer_input(shape = percentage, name = "gene.mod")
@@ -422,14 +424,16 @@ sae <- keras_model(sae_input, sae_output)
 summary(sae)
 
 # Code below is used for loading model (and model checking) in separate file for tfruns().
+# Predictions are used to check that weight-loading in separate file works as expected. 
 yhat <- predict(sae, xtest)
-write.csv(yhat, file = "predictions.csv")
+write.csv(yhat, file = "predictions.csv") 
+# Model weights are saved in order to reconstruct same model in separate file. 
 save_model_weights_hdf5(sae, "sae.hdf5")
 ```
 
 # SAE as Pre-Training Model for Prediction of Estrogen Receptor State
 
-The SAE is used as a pre-training model for prediction of the estrogen receptor state. The DNN has 10 nodes in the first layer, followed by one output node. The weights are frozen for the first 3 functional layers, which means that only the weights from the third autoencoder to the first fully connected layer and from the first layer in the DNN to the output layer (in total 521 weights) NOTE TO SELF: GJØR DETTE TALLET DYNAMISK OGSÅ (HVIS MULIG) are to be fine-tuned to obtain the final classifier. 
+The SAE is used as a pre-training model for prediction of the BRCA estrogen receptor status. The DNN has 10 nodes in the first fully connected layer, followed by one output node. The weights are frozen for the first 3 functional layers, which means that only the weights from the third autoencoder to the first fully connected layer and from the first fully connected layer in the DNN to the output layer are to be fine-tuned to obtain the final classifier. 
 
 ```{r}
 sae_output2 <- sae_output %>%
@@ -486,14 +490,14 @@ confusionMatrix(yhatclass,as.factor(ytestlabels))
 The ROC curve is shown below. 
 
 ```{r}
-roc_sae_test <- roc(response = ytestlabels, predictor = as.numeric(yhat))
-plot(roc_sae_test, col = "blue", print.auc=TRUE)
+roc_sae_test1 <- roc(response = ytestlabels, predictor = as.numeric(yhat))
+plot(roc_sae_test1, col = "blue", print.auc=TRUE)
 legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
 ```
 
-As is seen above, the AUC is `r round(roc_sae_test$auc, 2)`.
+As is seen above, the AUC is `r round(roc_sae_test1$auc, 2)`.
 
-For an AUC curve, a score of 1 would signify a perfect predictor whilst a score of 0.5 would signify that the predictor is just as good as a random generator (i.e. equivalent to flipping a coin). A score of `r round(roc_sae_test$auc, 2)` is therefore considered acceptable as it should be able to distinguish the various cases to some extent, however there is big room for improvement.
+For an AUC curve, a score of 1 would signify a perfect predictor whilst a score of 0.5 would signify that the predictor has no ability to discriminate between classes. In this case, this would mean that the model would have no ability to predict a positive or negative BRCA receptor status. A score of `r round(roc_sae_test1$auc, 2)` is therefore considered good, as it should be able to distinguish the various cases to a good extent. However, as always, there is still some room for improvement. 
 
 # Use `tfruns` to Explore Configurations of First Fully Connected Layer
 
@@ -502,44 +506,45 @@ In this section, `tfruns` is used to explore what amount of nodes in the first l
 
 Thus, the final model is
 
-```{r}
+```{r final_mod, cache = F}
 sae_output2 <- sae_output %>%
   layer_dense(20,activation = "relu") %>% # Couple with fully connected layers (DNN).
   layer_dense(1,activation = "sigmoid")
 
-sae <- keras_model(sae_input, sae_output2)
-summary(sae)
+sae.final <- keras_model(sae_input, sae_output2)
+summary(sae.final)
 
-freeze_weights(sae,from=1,to=4) # Freeze the weights (pre-training using the SAE).
-summary(sae)
+freeze_weights(sae.final,from=1,to=4) # Freeze the weights (pre-training using the SAE).
+summary(sae.final)
 
-sae %>% compile(
+sae.final %>% compile(
   optimizer = "rmsprop",
   loss = 'binary_crossentropy',
   metric = "acc"
 )
 
-sae %>% fit(
+sae.final %>% fit(
   x=xtrain,
   y=ylabels,
-  epochs = 80,
+  epochs = 120,
   batch_size=64,
   validation_split = 0.2,
   callbacks = callbacks_parameters
 )
 
-sae %>%
+sae.final %>%
   evaluate(xtest, ytestlabels)
 
-yhat <- predict(sae,xtest)
+yhat <- predict(sae.final,xtest)
 yhatclass<-as.factor(ifelse(yhat<0.5,0,1))
 confusionMatrix(yhatclass,as.factor(ytestlabels))
 
-roc_sae_test <- roc(response = ytestlabels, predictor = as.numeric(yhat))
-plot(roc_sae_test, col = "blue", print.auc=TRUE)
+roc_sae_test2 <- roc(response = ytestlabels, predictor = as.numeric(yhat))
+plot(roc_sae_test2, col = "blue", print.auc=TRUE)
 legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
 ```
-From the ROC curve we see that the AUC-score now is closer to 1, indicating that this is a better model.
+
+From the ROC curve we see that the AUC-score is very similar to the earlier model. Each training of the model gives different results, which means that some runs yield a better model and others yield a worse model. On average, this model seems to be better, but notice that the differences seem to be minimal. 
 
 ## Complete Data 
 
@@ -552,7 +557,7 @@ chosen.data <- full.gene.prot.clin # Complete data set, as defined in part 1.
 xclin <- clinical[,c(1,9)]
 colnames(xclin) <- c("Sample", "BRCA")
 xclin <- xclin[clinical$Sample %in% chosen.data, ] 
-xprot <- prot.ab[prot.ab$Sample%in%chosen.data,]
+xprot <- prot.ab[prot.ab$Sample %in% chosen.data,]
 xgene <- gene.exp2[gene.exp2$Sample %in% chosen.data, ]
 
 sel1 <- which(xclin$BRCA != "Positive")
@@ -581,7 +586,7 @@ xgene2 <- xgene %>% dplyr::filter(Sample %in% mtot.patients)
 
 # Pick out the same features as in the first model (as noted in section 1.1.1).
 xgene2 <- xgene2[, c(1,sorted)] # Select the 25% largest variance variables using the indices found in section 1.1.1.
-# We also select the patient sample id, following the same pattern as above. 
+# We also select the patient sample id, following the same pattern as above (thus c(1,sorted) above. 
 xgene.train <- xgene2[training,-1]
 xgene.test <- xgene2[-training,-1]
 
@@ -621,7 +626,6 @@ The SAE for the abundance of proteins (from class examples) is added in the code
 # Model given by teaching staff. A lot of code from the original file is removed and variables are renamed. 
 source("aes_practice_3.R") # source: Parses the code and evaluates it in this environment. 
 ```
-
 
 # Concatenated Model
 
@@ -670,6 +674,7 @@ model %>% fit(
   callbacks = callbacks_parameters
 )
 ```
+
 ## Performance Metrics
 
 The model is evaluated on the test set below.  
@@ -691,17 +696,34 @@ confusionMatrix(yhatclass,as.factor(ytestlabels.comp))
 The ROC curve is shown below. 
 
 ```{r}
-roc_sae_test <- roc(response = ytestlabels.comp, predictor = as.numeric(yhat))
-plot(roc_sae_test, col = "blue", print.auc=TRUE)
+roc_sae_test.concat <- roc(response = ytestlabels.comp, predictor = as.numeric(yhat))
+plot(roc_sae_test.concat, col = "blue", print.auc=TRUE)
 legend("bottomright", legend = c("sae"), lty = c(1), col = c("blue"))
 ```
 
 # Discussion
 
-There seems to be some different angles to address the first step of processing the data sets. The removal of the patients samples with missing values in the gene expression data set seems to be an important step to secure that all used patients has complete data to pass as input to the network. The question then arise if we only should include the patients samples that both exist in the gene expression data set and the protein abundance data set when implementing the stacked autoencoder, to then be able to use the same set for the concatenate version in the later stage. Since the first part asked specific to implement a SAE with the gene expression data we choose the alternative that was to
-include all complete patients in the gene expression data set, with no consideration of they existed in the protein abundance data set. Or motivation was that this should work as least as good as the alternative for the SAE, this method gave more patients left in the actual used training set.
+## Comparing Performance Metrics of the Two Models
+
+<!-- Remove this because of uncertainty right before delivery -->
+<!-- The concatenated model is based on the input of two different types of data (gene expression and protein abundance). This means that our concatenated model is looking at more than 4500 different data points per patient at the same time in order to determine whether the BRCA status of the patient is positive or negative. Furthermore, due to the structure of `layer_concatenate`, each data point is treated with the same bias. This means that, even though our two different data sets may have a different significance for the outcome of our labels, every point in both data sets are given equal bias. Therefore, the concatenated model is consisting of many thousand points that are considered to affect the labels equally, however, in reality may have significantly different impacts on our samples. -->
+
+Our model for protein abundance was taken from a lecture and has not been tuned by us in order to improve the total AUC score. Therefore, our concatenation consists of one model performing with an AUC-score of `r round(roc_sae_test2$auc, 2)`, and another with an AUC-score of `r round(roc_sae_test.concat$auc, 2)`. As the AUC is better the closer it gets to 1 and given the fact that the models are given equal weight when concatenating, it is obvious that the unity of the well-performing model and one performing "ok" gives a worse overall score, compared to the score obtained from the first model. 
+
+As one can see in the latter graph, the ROC curve of the concatenated model is looking linear at several points. In the first ROC curve, it is more curved. This is, of course, due to the AUC being closer to 1, however it is also due to a large instance of our cases on our concatenated model having the same value. This further substantiates the observation or conclusion that the second model performs worse than the first model. In short, the negligence of the importance of the different data given has led to a worse performance of the concatenated model. By concatenating, we have united an ok-performing model with a well-performing model and overfed it information, leading to a bad AUC score.
+
+The first model and the concatenated model are based on two different activation functions; the first model incorporates one output node with the sigmoid activation function and `binary_crossentropty` loss, while the concatenated model incorporates two output nodes with the softmax activation function and `categorical_crossentropy` loss. The sigmoid function is often used for binary classifier problems - such as the one we are facing. The softmax function, as used in the last model, is based on a probability distribution of each element in the data given. This also means that the probabilities here are based on the input number given - a larger input number gives a larger probability, and they are all added to give an absolute score. So, in the sigmoid model we assign them a value according to the function q/(1+exp(-x)), whilst in softmax it is more dependent on the probability distribution of all inputs. If we connect this to the nature of the `keras` function `concatenate_layer()`, we can see that some values may have been given unfairly large - or unfairly small - bias when calculating the probability. We tried avoiding this through the pre-processing of data (for example by choosing the 25% of columns with highest variability), as well as the scaling of our variables depending on columns, however this fault is unavoidable. Thereby, the usage of the softmax function for two different datasets may lead to a worse performance of the model as it doesn't "discriminate" according to significance of variables. 
+
+## General Discussion 
+
+There seems to be some different angles to address the first step of processing the data sets. The removal of the patients samples with missing values in the gene expression data set seems to be an important step to secure that all used patients has complete data to pass as input to the network. The question then arise if we only should include the patients samples that both exist in the gene expression data set and the protein abundance data set when implementing the stacked autoencoder, to then be able to use the same set for the concatenate version in the later stage. Since the first part asked specificly to implement a SAE with the gene expression data we choose the alternative that was to include all complete patients in the gene expression data set, with no consideration of they existed in the protein abundance data set. Our motivation was that this should work as least as good as the alternative for the SAE, since this method gave more patients left in the actual used training set.
 
 One thing to remember when choosing the above described way is that we should make sure that the same genes that were selected for the training of the first SAE are also the selected in the preparation of the joint data set for the concatenate SAE. Otherwise we risk training the first SAE on one set of genes from each patient and then using it on a potential other set of genes. 
 
-In the training of the SAE one difficulty is to avoid both underfitting and overfitting on the training data. With the aim to run each training for a suitable amount of epochs each training were monitored so that it could not keep training the network if the performance on the validation set did not increase during a fixed number of epochs. The intention is that this will lead to a network with better performance on the test set. This process was done using 'callbacks'. Some parameters for the callbacks were specified: the progress to monitor was set to be the validation loss (the "val-loss") and the mode was set to minimize this. In the very first training the patience was set to 12, that is the number of epochs the the training could continue without any improvement in the "val-loss". All other training sessions were using callbacks with patience 8. The reason for this were that the first training did often encounter a quite low value in "val-loss" within the very first epochs, followed by a couple of higher values in "val-loss". With a low value on patience, this could lead to that the network only trained for a couple of epochs. The extra added patience-epochs then gives the first training better chances to either find a better "val-loss"-value and reset the patience-counter or to at least continue training before the patience is reached and the training is stopped. The last fact is working due to another parameter choice to not revert to weights corresponding to the earlier encountered best "val-loss". Whether the patience parameter should be reduced or the weight should be reverted to the stage of the best run or not is not so certain. After the first training, the other sessions generally last for much longer epochs, and are therefor not as sensible to a few epochs, but the callbacks still allows the training to last for long without the overfitting risk (if implemented correctly).
+In the training of the SAE one difficulty is to avoid both underfitting and overfitting on the training data. With the aim to run each training for a suitable amount of epochs each training were monitored so that it could not keep training the network if the performance on the validation set did not increase during a fixed number of epochs. The intention is that this will lead to a network with better performance on the test set. This process was done using "callbacks". Some parameters for the callbacks were specified: the progress to monitor was set to be the validation loss (the "val-loss") and the mode was set to minimize this. In the very first training the patience was set to 12, that is the number of epochs the the training could continue without any improvement in the "val-loss". All other training sessions were using callbacks with patience 8. The reason for this were that the first training did often encounter a quite low value in "val-loss" within the very first epochs, followed by a couple of higher values in "val-loss". With a low value on patience, this could lead to that the network only trained for a couple of epochs. The extra added patience-epochs then gives the first training better chances to either find a better "val-loss"-value and reset the patience-counter or to at least continue training before the patience is reached and the training is stopped. The last fact is working due to another parameter choice to not revert to weights corresponding to the earlier encountered best "val-loss". Whether the patience parameter should be reduced or the weight should be reverted to the stage of the best run or not is not so certain. After the first training, the other sessions generally last for much longer epochs, and are therefor not as sensible to a few epochs, but the callbacks still allows the training to last for long without the overfitting risk (if implemented correctly).
 
+Notice that we could have used other techniques to improve generalization, like dropout. Moreover, the optimizer is chosen somewhat arbitrarily among the many in existence, which means that the optimizer used throughout the task might not be optimal for this problem. 
+
+The optimal value chosen using `tfruns` is not the absolute best value statistically decided, as each training and testing run yields different results. We chose the best model based on a few runs, but a better way might be to run the model many more times and choose the configuration that comes out on top the most times. The results do not seem to depend highly on this configuration however. 
+
+Lastly, we note that in order to avoid problems with differing output files and retraining every time the `Rmd` is run (since pseudo-random numbers and iterative optimization techniques are used during training), we should have trained the models separately and simply saved the trained models (or the weights), using the relevant `keras` API. These models or weights could then have been loaded into this file, as is done in the separate `task1_explore_conf_DNN.R` file for `tfruns`. This would have made the discussions consistent from render to render and would have made our lives easier. Note to self for next time. 
