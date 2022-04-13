@@ -12,7 +12,7 @@ library(pROC)
 ```
 
 ```{r}
-setwd("/home/ajo/gitRepos/DNN/task1")
+#setwd("/home/ajo/gitRepos/DNN/task1")
 clinical <- read_delim("clinical.csv","\t", escape_double = FALSE, trim_ws = TRUE)
 #gene_expression <- read_delim("gene_expression.csv","\t", escape_double = FALSE, trim_ws = TRUE)
 protein_abundance <- read_delim("protein_abundance.csv","\t", escape_double = FALSE, trim_ws = TRUE)
@@ -187,6 +187,7 @@ decoded_expression <- decoder %>% predict(encoded_expression)
 colMain <- colorRampPalette(brewer.pal(8, "Blues"))(15)
 heatmap(encoded_expression,  RowSideColors=as.character(ylabels) , col=colMain, scale="row" )
 ```
+
 ## Stacked autoencoder
 
 ### AE1

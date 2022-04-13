@@ -6,67 +6,7 @@ library(readr)
 library(pROC)
 library(caret)
 
-# Load and clean data before defining the model. The code is identical to in the main Rmd file. 
-## ---------------------------------------------------------------------------------
-# gene.exp <- read_delim("gene_expression.csv", "\t", escape_double = FALSE, trim_ws = TRUE)
-# prot.ab <- read_delim("protein_abundance.csv", "\t", escape_double = FALSE, trim_ws = TRUE)
-# clinical <- read_delim("clinical.csv","\t", escape_double = FALSE, trim_ws = TRUE)
-# 
-# gene.exp2 <- gene.exp[complete.cases(gene.exp),]
-# 
-# ## ---------------------------------------------------------------------------------
-# int4 <- intersect(gene.exp2$Sample, clinical$Sample)
-# 
-# ## ---------------------------------------------------------------------------------
-# chosen.data <- int4 # Change this definition after deciding which data set to use!
-# xclin <- clinical[,c(1,9)]
-# colnames(xclin) <- c("Sample", "BRCA")
-# xclin <- xclin[clinical$Sample %in% chosen.data, ] 
-# #xprot <- prot.ab[prot.ab$Sample%in%chosen.data,]
-# xgene <- gene.exp2[gene.exp2$Sample %in% chosen.data, ]
-# 
-# sel1 <- which(xclin$BRCA != "Positive")
-# sel2 <- which(xclin$BRCA != "Negative")
-# sel <- intersect(sel1,sel2) # Find values of BRCA that are not negative or positive. 
-# # In this case these values are either "Indeterminate" or "Not Performed".
-# xclin <- xclin[-sel,] # Remove the rows with non-valid data for BRCA. 
-# xclin <- xclin[-which(is.na(xclin$BRCA)),] # Also remove rows with missing data for BRCA. 
-# 
-# # Join the (cleaned) clinical data and the gene expression data on "Sample".
-# mgene <- merge(xclin, xgene, by.x = "Sample", by.y = "Sample")
-# 
-# ## ---------------------------------------------------------------------------------
-# percentage <- round(dim(mgene[,-c(1,2)])[[2]]*0.25) # Find how many variables correspond to 25%. 
-# variances <- apply(X=mgene[,-c(1,2)], MARGIN=2, FUN=var) # Find empirical variance in each of the variables (genes).
-# sorted <- sort(variances, decreasing=TRUE, index.return=TRUE)$ix[1:percentage] # Sort from highest to lowest variance and select the top 25% indices. 
-# mgene.lvar <- mgene[, c(1,2,sorted)] # Select the 25% largest variance variables using the indices found above. 
-# 
-# ## ---------------------------------------------------------------------------------
-# set.seed(111)
-# training.fraction <- 0.7 # 70 % of data will be used for training. 
-# training <- sample(1:nrow(mgene.lvar),nrow(mgene.lvar)*training.fraction) 
-# 
-# xtrain <- mgene.lvar[training,-c(1,2)]
-# xtest <- mgene.lvar[-training,-c(1,2)]
-# 
-# # Scaling for better numerical stability. 
-# # This is a standard "subtract mean and divide by standard deviation" scaling. 
-# xtrain <- scale(data.matrix(xtrain)) 
-# xtest <- scale(data.matrix(xtest))
-# 
-# # Pick out labels for train and test set. 
-# ytrain <- mgene.lvar[training,2]
-# ytest <- mgene.lvar[-training,2]
-# 
-# # Change labels to numerical values in train and test set. 
-# ylabels <- c()
-# ylabels[ytrain=="Positive"] <- 1
-# ylabels[ytrain=="Negative"] <- 0
-# 
-# ytestlabels <- c()
-# ytestlabels[ytest=="Positive"] <- 1
-# ytestlabels[ytest=="Negative"] <- 0
-
+# Load data generated for this purpose in main Rmd. 
 data.train <- read.csv("train_for5.csv")[,-1]
 data.test <- read.csv("test_for5.csv")[,-1]
 xtrain <- data.matrix(data.train[,-1])
@@ -134,14 +74,22 @@ sae %>% compile(
   metric = "acc"
 )
 
+callbacks_parameters <- callback_early_stopping(
+  monitor = "val_loss",
+  patience = 8,
+  verbose = 1,
+  mode = "min",
+  restore_best_weights = FALSE
+)
 
 ## ---------------------------------------------------------------------------------
 sae %>% fit(
   x=xtrain,
   y=ylabels,
-  epochs = 30,
+  epochs = 120,
   batch_size=64,
-  validation_split = 0.2
+  validation_split = 0.2,
+  callbacks = callbacks_parameters
 )
 
 

@@ -8,25 +8,25 @@ library(pROC)
 
 ## ---------------------------------------------------------------------------------
 #setwd("/home/ajo/gitRepos/DNN/task1")
-clinical <- read_delim("clinical.csv","\t", escape_double = FALSE, trim_ws = TRUE)
+#clinical <- read_delim("clinical.csv","\t", escape_double = FALSE, trim_ws = TRUE)
 #gene_expression <- read_delim("gene_expression.csv","\t", escape_double = FALSE, trim_ws = TRUE)
-protein_abundance <- read_delim("protein_abundance.csv","\t", escape_double = FALSE, trim_ws = TRUE)
+#protein_abundance <- read_delim("protein_abundance.csv","\t", escape_double = FALSE, trim_ws = TRUE)
 #copy_number <- read_delim("copy_number.csv","\t", escape_double = FALSE, trim_ws = TRUE)
 
-set1<-intersect(protein_abundance$Sample,clinical$Sample)
+set1<-intersect(prot.ab$Sample,clinical$Sample)
 
 xclinical<-clinical[clinical$Sample%in%set1,]
-xprotein<-protein_abundance[protein_abundance$Sample%in%set1,]
+xprotein<-prot.ab[prot.ab$Sample%in%set1,]
 
 xclinical<-xclinical[,c(1,9)]
-sel1<-which(xclinical$breast_carcinoma_estrogen_receptor_status!="Positive")
-sel2<-which(xclinical$breast_carcinoma_estrogen_receptor_status!="Negative")
+colnames(xclinical) <- c("Sample", "BRCA")
+sel1<-which(xclinical$BRCA!="Positive")
+sel2<-which(xclinical$BRCA!="Negative")
 
 sel<-intersect(sel1,sel2)
 xclinical<-xclinical[-sel,]
 
-xclinical<-xclinical[-which(is.na(xclinical$breast_carcinoma_estrogen_receptor_status)),]
-
+xclinical<-xclinical[-which(is.na(xclinical$BRCA)),]
 
 mprotein<-merge(xclinical,xprotein,by.x="Sample",by.y="Sample")
 
@@ -37,7 +37,8 @@ sel<-complete.cases(t(mprotein))
 
 ## ---------------------------------------------------------------------------------
 set.seed(111)
-training<-sample(1:nrow(mprotein),2*nrow(mprotein)/3)
+training.fraction <- 0.70 # 70 % of data will be used for training. 
+training<-sample(1:nrow(mprotein),training.fraction*nrow(mprotein))
 
 
 xtrain<-mprotein[training,-c(1,2)]
@@ -58,148 +59,31 @@ ytestlabels<-vector()
 ytestlabels[ytest=="Positive"]<-1
 ytestlabels[ytest=="Negative"]<-0
 
-
 ## ---------------------------------------------------------------------------------
-model<-keras_model_sequential() %>% 
-  layer_dense(units=50,activation="relu",input_shape=c(142)) %>%
-  layer_dense(units=20,activation="relu") %>%
-  layer_dense(units=50,activation="relu") %>%
-  layer_dense(units=142,activation="linear")
-
-
-## ---------------------------------------------------------------------------------
-summary(model)
-
-
-## ---------------------------------------------------------------------------------
-model %>% compile(
-  optimizer = "rmsprop",
-  loss = "mse"
-)
-
-
-## ---------------------------------------------------------------------------------
-model %>% fit(
-  x=as.matrix(xtrain),
-  y=as.matrix(xtrain),
-  epochs = 25,
-  batch_size=64,
-  validation_split = 0.2
-)
-
-
-## ---------------------------------------------------------------------------------
-x.hat<-predict(model,as.matrix(xtrain))
-
-
-## ---------------------------------------------------------------------------------
-vcor<-diag(cor(x.hat,xtrain))
-hist(vcor)
-
-
-## ---------------------------------------------------------------------------------
-# visual inspection
-plot(x.hat[,50]~xtrain[,50])
-
-
-## ---------------------------------------------------------------------------------
-x.hat<-predict(model,as.matrix(xtest))
-
-
-## ---------------------------------------------------------------------------------
-vcor<-diag(cor(x.hat,xtest))
-hist(vcor)
-
-
-## ---------------------------------------------------------------------------------
-# visual inspection
-plot(x.hat[,50]~xtest[,50])
-
-
-## ---------------------------------------------------------------------------------
-input_enc<-layer_input(shape = 142)
-output_enc<-input_enc %>% 
-  layer_dense(units=50,activation="relu") %>%
-  layer_dense(units=20,activation="relu")
-
-prot_encoder = keras_model(input_enc, output_enc)
-summary(prot_encoder)
-
-
-## ---------------------------------------------------------------------------------
-input_dec = layer_input(shape = 20)
-output_dec<-input_dec %>% 
-  layer_dense(units=50,activation="relu") %>%
-  layer_dense(units=142,activation="linear")
-
-decoder = keras_model(input_dec, output_dec)
-
-summary(decoder)
-
-
-## ---------------------------------------------------------------------------------
-aen_input = layer_input(shape = 142)
-aen_output = aen_input %>% 
-  prot_encoder() %>% 
-  decoder()
-
-aen = keras_model(aen_input, aen_output)
-summary(aen)
-
-
-## ---------------------------------------------------------------------------------
-aen %>% compile(
-  optimizer = "rmsprop",
-  loss = "mse"
-)
-
-
-## ---------------------------------------------------------------------------------
-aen %>% fit(
-  x=as.matrix(xtrain),
-  y=as.matrix(xtrain),
-  epochs = 25,
-  batch_size=64,
-  validation_split = 0.2
-)
-
-
-## ---------------------------------------------------------------------------------
-#Generating with Autoprot_encoder
-encoded_expression <- prot_encoder %>% predict(as.matrix(xtrain))
-decoded_expression <- decoder %>% predict(encoded_expression)
-
-
-## ---------------------------------------------------------------------------------
-colMain <- colorRampPalette(brewer.pal(8, "Blues"))(15)
-heatmap(encoded_expression,  RowSideColors=as.character(ylabels) , col=colMain, scale="row" )
-
-
-## ---------------------------------------------------------------------------------
-input_enc1<-layer_input(shape = 142)
-output_enc1<-input_enc1 %>% 
+p_input_enc1<-layer_input(shape = 142)
+p_output_enc1<-p_input_enc1 %>% 
   layer_dense(units=50,activation="relu") 
-prot_encoder1 = keras_model(input_enc1, output_enc1)
+prot_encoder1 = keras_model(p_input_enc1, p_output_enc1)
 summary(prot_encoder1)
 
 
 ## ---------------------------------------------------------------------------------
-input_dec1 = layer_input(shape = 50)
-output_dec1<-input_dec1 %>% 
+p_input_dec1 <- layer_input(shape = 50)
+p_output_dec1<-p_input_dec1 %>% 
   layer_dense(units=142,activation="linear")
 
-decoder1 = keras_model(input_dec1, output_dec1)
+p_decoder1 = keras_model(p_input_dec1, p_output_dec1)
 
-summary(decoder1)
+summary(p_decoder1)
 
 
 ## ---------------------------------------------------------------------------------
-aen_input1 = layer_input(shape = 142)
-aen_output1 = aen_input1 %>% 
+p_aen_input1 <- layer_input(shape = 142)
+p_aen_output1 <- p_aen_input1 %>% 
   prot_encoder1() %>% 
-  decoder1()
+  p_decoder1()
 
-sae_protab1 = keras_model(aen_input1, aen_output1)
+sae_protab1 <- keras_model(p_aen_input1, p_aen_output1)
 summary(sae_protab1)
 
 
@@ -214,7 +98,7 @@ sae_protab1 %>% compile(
 sae_protab1 %>% fit(
   x=as.matrix(xtrain),
   y=as.matrix(xtrain),
-  epochs = 25,
+  epochs = 100,
   batch_size=64,
   validation_split = 0.2
 )
@@ -226,30 +110,30 @@ encoded_expression1 <- prot_encoder1 %>% predict(as.matrix(xtrain))
 
 
 ## ---------------------------------------------------------------------------------
-input_enc2<-layer_input(shape = 50)
-output_enc2<-input_enc2 %>% 
+p_input_enc2<-layer_input(shape = 50)
+p_output_enc2<-p_input_enc2 %>% 
   layer_dense(units=20,activation="relu") 
-prot_encoder2 = keras_model(input_enc2, output_enc2)
+prot_encoder2 = keras_model(p_input_enc2, p_output_enc2)
 summary(prot_encoder2)
 
 
 ## ---------------------------------------------------------------------------------
-input_dec2 = layer_input(shape = 20)
-output_dec2<-input_dec2 %>% 
+p_input_dec2 <- layer_input(shape = 20)
+p_output_dec2<-p_input_dec2 %>% 
   layer_dense(units=50,activation="linear")
 
-decoder2 = keras_model(input_dec2, output_dec2)
+p_decoder2 <- keras_model(p_input_dec2, p_output_dec2)
 
-summary(decoder2)
+summary(p_decoder2)
 
 
 ## ---------------------------------------------------------------------------------
-aen_input2 = layer_input(shape = 50)
-aen_output2 = aen_input2 %>% 
+p_aen_input2 <- layer_input(shape = 50)
+p_aen_output2 <- p_aen_input2 %>% 
   prot_encoder2() %>% 
-  decoder2()
+  p_decoder2()
 
-sae_protab2 = keras_model(aen_input2, aen_output2)
+sae_protab2 <- keras_model(p_aen_input2, p_aen_output2)
 summary(sae_protab2)
 
 
@@ -264,7 +148,7 @@ sae_protab2 %>% compile(
 sae_protab2 %>% fit(
   x=as.matrix(encoded_expression1),
   y=as.matrix(encoded_expression1),
-  epochs = 25,
+  epochs = 100,
   batch_size=64,
   validation_split = 0.2
 )
@@ -276,30 +160,30 @@ encoded_expression2 <- prot_encoder2 %>% predict(as.matrix(encoded_expression1))
 
 
 ## ---------------------------------------------------------------------------------
-input_enc3<-layer_input(shape = 20)
-output_enc3<-input_enc3 %>% 
+p_input_enc3<-layer_input(shape = 20)
+p_output_enc3<-p_input_enc3 %>% 
   layer_dense(units=10,activation="relu") 
-prot_encoder3 = keras_model(input_enc3, output_enc3)
+prot_encoder3 <- keras_model(p_input_enc3, p_output_enc3)
 summary(prot_encoder3)
 
 
 ## ---------------------------------------------------------------------------------
-input_dec3 = layer_input(shape = 10)
-output_dec3<-input_dec3 %>% 
+p_input_dec3 <- layer_input(shape = 10)
+p_output_dec3<-p_input_dec3 %>% 
   layer_dense(units=20,activation="linear")
 
-decoder3 = keras_model(input_dec3, output_dec3)
+p_decoder3 <- keras_model(p_input_dec3, p_output_dec3)
 
-summary(decoder3)
+summary(p_decoder3)
 
 
 ## ---------------------------------------------------------------------------------
-aen_input3 = layer_input(shape = 20)
-aen_output3 = aen_input3 %>% 
+p_aen_input3 <- layer_input(shape = 20)
+p_aen_output3 <- p_aen_input3 %>% 
   prot_encoder3() %>% 
-  decoder3()
+  p_decoder3()
 
-sae_protab3 = keras_model(aen_input3, aen_output3)
+sae_protab3 <- keras_model(p_aen_input3, p_aen_output3)
 summary(sae_protab3)
 
 
@@ -314,7 +198,7 @@ sae_protab3 %>% compile(
 sae_protab3 %>% fit(
   x=as.matrix(encoded_expression2),
   y=as.matrix(encoded_expression2),
-  epochs = 25,
+  epochs = 100,
   batch_size=64,
   validation_split = 0.2
 )
@@ -331,9 +215,7 @@ sae_protab_output = sae_protab_input %>%
   prot_encoder1() %>% 
   prot_encoder2()  %>%
   prot_encoder3() %>%
-  #layer_dense(5,activation = "relu")%>%
-  #Changed this in order to have a layer_dense thing of 20
-  layer_dense(20,activation = "relu")%>%
+  layer_dense(5,activation = "relu") %>%
   layer_dense(1,activation = "sigmoid")
 
 sae_protab = keras_model(sae_protab_input, sae_protab_output)
@@ -342,6 +224,7 @@ summary(sae_protab)
 
 ## ---------------------------------------------------------------------------------
 freeze_weights(sae_protab,from=1,to=4)
+# Freeze weights in order to only finetune weights to two fully connected dense layers (of 5 nodes + output layer).
 
 
 ## ---------------------------------------------------------------------------------
@@ -360,7 +243,7 @@ sae_protab %>% compile(
 sae_protab %>% fit(
   x=xtrain,
   y=ylabels,
-  epochs = 30,
+  epochs = 50,
   batch_size=64,
   validation_split = 0.2
 )
