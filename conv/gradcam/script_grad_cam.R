@@ -1,6 +1,3 @@
-
-
-
 if (tensorflow::tf$executing_eagerly())
   tensorflow::tf$compat$v1$disable_eager_execution()
 
@@ -15,7 +12,7 @@ library(viridis)
 model <- application_vgg16(weights = "imagenet")
 
 
-img_path <- "/Users/frc/Documents/Docencia/ub/curs21_22/dl/airplanes_2.jpg"
+img_path <- "airplanes_2.jpg"
 img <- image_load(img_path, target_size = c(224, 224)) %>%
   image_to_array() %>%
   array_reshape(dim = c(1, 224, 224, 3)) %>%
@@ -70,8 +67,3 @@ image_read("airplanes_overlay_2.png") %>%
   image_resize(geometry, filter = "quadratic") %>%
   image_composite(image, operator = "blend", compose_args = "20") %>%
   plot()
-
-
-
-
-

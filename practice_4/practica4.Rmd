@@ -1,0 +1,233 @@
+---
+title: "Practice 4: Convolutional Networks and Malaria"
+subtitle: "Statistical Learning with Deep Artificial Neural Networks"
+author: "Alexander J Ohrt"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  pdf_document:
+    number_sections: true
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    theme: readable
+    highlight: textmate
+    number_sections: true
+editor_options: 
+  chunk_output_type: console
+urlcolor: blue
+params: 
+  seed: 111
+---
+
+\tableofcontents
+\newpage
+
+```{r setup, include=FALSE}
+#rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE, warning = F, comment = "#>")
+setwd("/home/ajo/gitRepos/DNN/practice_4")
+library(dplyr)
+library(keras)
+library(caret)
+library(tfruns)
+set.seed(params$seed)
+```
+
+# Introduction
+
+In this practice we will apply a convolutional neural networks (CNN) to build a classifier that allows us to discriminate images from uninfected and infected patients.     
+
+# Implementation of CNN 
+
+We implement the following CNN
+
+```{r}
+model <- keras_model_sequential() %>%
+layer_conv_2d(filters=32, kernel_size=3, activation = "relu", input_shape=c(64, 64, 3)) %>%
+layer_max_pooling_2d(pool_size = c(2,2)) %>%
+layer_conv_2d(filters=64, kernel_size=3, activation = "relu") %>%
+layer_max_pooling_2d(pool_size = c(2,2)) %>%
+layer_conv_2d(filters=128, kernel_size=3, activation = "relu") %>%
+layer_max_pooling_2d(pool_size = c(2,2)) %>%
+layer_conv_2d(filters=128, kernel_size=3, activation = "relu") %>%
+layer_max_pooling_2d(pool_size = c(2,2)) %>%
+layer_flatten() %>%
+layer_dense(units = 512, activation = 'relu') %>%
+layer_dense(units = 1, activation = 'sigmoid')
+summary(model)
+```
+
+The model is compiled below
+
+```{r}
+  model %>% compile(
+  loss = 'binary_crossentropy',
+  optimizer = optimizer_adadelta(),
+  metrics = c('accuracy')
+)
+```
+
+The data (images) is loaded
+
+```{r, eval = F}
+# Not sure how to load the data right now. 
+# Could do something like this (e.g.): https://tensorflow.rstudio.com/tutorials/beginners/load/load_image/
+
+path.folder <- "malaria"
+
+train.infected <- image_load(paste(path.folder, "train", "infected", sep = "/")) %>%
+  image_to_array() %>%
+  array_reshape(dim = c(1, 224, 224, 3)) %>%
+  imagenet_preprocess_input()
+```
+
+
+The model is fit below
+
+```{r, eval = F}
+history <- model %>% fit(
+  x = encoded_expression1,
+  y = encoded_expression1,
+  epochs = 100,
+  batch_size = 64,
+  validation_split = 0.2,
+  callbacks = callback.parameters
+)
+plot(history)
+```
+
+
+# `tfruns` for Hyperparameter Tuning
+
+`tfruns` is used to optimize the hyperparameter `batch_size` on the grid `r c(16, 32, 64)`.
+
+It turns out that the best model is obtained when using the batch size ... I HAVE SKIPPED THIS PART FOR NOW. I choose 64 in order to continue. 
+
+```{r}
+batch.size = 64
+```
+
+
+# Early Stopping using Callbacks
+
+Early stopping is implemented using the `keras callbacks() early-stopping API` in order to avoid overfitting. Training is interrupted when validation accuracy stops improving for more than two epochs. 
+
+```{r, eval = F}
+callback.parameters <- callback_early_stopping(
+  monitor = "val_loss",
+  patience = 2,
+  verbose = 1,
+  mode = "min",
+  restore_best_weights = FALSE
+)
+
+history <- model %>% fit(
+  x = encoded_expression1,
+  y = encoded_expression1,
+  epochs = 100,
+  batch_size = batch.size,
+  validation_split = 0.2,
+  callbacks = callback.parameters
+)
+plot(history)
+```
+
+# Performance Assessment of CNN
+
+The categories of test images are predicted using the CNN and the confusion matrix is shown. 
+
+```{r, eval = F}
+# keras/tensorflow version >= 2.6
+# se obtiene un objeto tf.tensor
+y_pred <- model %>% predict(x_test) %>% k_argmax()
+# se pasa a vector
+# https://tensorflow.rstudio.com/guide/tensorflow/tensors/
+y_pred <- y_pred %>% shape() %>% unlist()
+confusionMatrix(as.factor(DATATESTLABELS), as.factor(y_pred))
+```
+
+
+# Convolutional Autoencoder (CAE) 
+
+In this section we implement a CAE with 10 nodes in $z$ layer (or bottleneck). The same number of convolutional layers, filter sizes, number of filters, pooling layers and dense layers as in the CNN are used. 
+
+```{r, eval = F}
+# Based o: https://blog.keras.io/building-autoencoders-in-keras.html
+#### Convolutional Encoder
+model_enc <- keras_model_sequential()
+model_enc %>%
+layer_conv_2d(filters = 16, kernel_size = c(3,3),
+activation = "relu", padding = "same",
+input_shape = input_dim) %>%
+layer_max_pooling_2d(pool_size = c(2,2), padding = "same")
+layer_conv_2d(filters = 8, kernel_size = c(3,3),
+activation = "relu", padding = "same") %>%
+layer_max_pooling_2d(pool_size = c(2,2), padding = "same")
+layer_conv_2d(filters = 8, kernel_size = c(3,3),
+activation = "relu", padding = "same") %>%
+layer_max_pooling_2d(pool_size = c(2,2), padding = "same")
+summary(model_enc)
+
+#### Convolutional Decoder
+model_dec <- keras_model_sequential()
+model_dec %>%
+layer_conv_2d(filters = 8, kernel_size = c(3,3),
+activation = "relu", padding = "same",
+input_shape = c(4, 4, 8)) %>%
+layer_upsampling_2d(size = c(2,2)) %>%
+layer_conv_2d(filters = 8, kernel_size = c(3,3),
+activation = "relu", padding = "same")
+layer_upsampling_2d(size = c(2,2)) %>%
+# Important: no padding
+layer_conv_2d(filters = 1, kernel_size = c(3,3),
+activation = "relu") %>%
+layer_upsampling_2d(size = c(2,2))
+summary(model_dec)
+
+model.CAE <- keras_model_sequential() 
+# input dimension == output dimension
+#### Autoencoder
+model.CAE %>% model_enc %>% model_dec
+summary(model.CAE)
+```
+
+We compile and fit the model. 
+
+```{r, eval = F}
+model %>% compile(
+  loss = "mean_squared_error",
+  #optimizer = optimizer_rmsprop(),
+  optimizer = "adam",
+  metrics = c("mean_squared_error")
+)
+
+history <- model %>% fit(
+  x= x_train_cifra, y = x_train_cifra,
+  # Autoencoder
+  epochs = 5, batch_size = 128,
+  suffle = TRUE,
+  validation_split = 0.2
+)
+```
+
+We do predictions.
+
+```{r, eval = F}
+# Autoencoder
+output_cifra <- predict(model,x_test_cifra)
+dim(output_cifra)
+
+# From input to encoder
+enc_output_cifra<-predict(model_enc,x_test_cifra)
+dim(enc_output_cifra)
+
+# From encoder to decoder
+dec_output_cifra<-predict(model_dec,enc_output_cifra)
+dim(dec_output_cifra)
+```
+
+
+# Graphical Representation of Results
+
+In this section we present graphically the results from the test images to show the association between $z$ layer activations and the class images. 
