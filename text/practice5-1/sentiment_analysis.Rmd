@@ -1,0 +1,216 @@
+---
+title: "Sentiment analysis"
+output: pdf_document
+---
+
+```{r}
+library(keras)
+```
+
+
+
+```{r}
+dat<-read.csv("~/Docencia/curs21_22/UB/MESIO/DL/sa.csv",header=F, sep=";")
+```
+
+```{r}
+texts<-dat[,1]
+labels<-dat[,2]
+```
+
+
+```{r}
+maxlen <- 25
+max_words <- 5000
+tokenizer <- text_tokenizer(num_words = max_words) %>%
+fit_text_tokenizer(texts)
+sequences <- texts_to_sequences(tokenizer, texts)
+word_index = tokenizer$word_index # les paraules que tenim en la nostra base de dades
+```
+
+
+```{r}
+texts[1:5]
+#names(word_index)
+sequences[1:5]
+```
+
+
+```{r}
+cat("Found", length(word_index), "unique tokens.\n")
+data <- pad_sequences(sequences, maxlen = maxlen)
+dim(data)
+data[5,]
+labels <- as.array(labels)
+cat("Shape of data tensor:", dim(data), "\n")
+cat('Shape of label tensor:', dim(labels), "\n")
+```
+
+
+
+```{r}
+training_samples <- 1500 # small subset of examples
+validation_samples <- 500
+indices <- sample(1:nrow(data))
+training_indices <- indices[1:training_samples]
+validation_indices <- indices[(training_samples + 1):
+(training_samples + validation_samples)]
+x_train <- data[training_indices,]
+y_train <- labels[training_indices]
+x_val <- data[validation_indices,]
+y_val <- labels[validation_indices]
+```
+
+
+
+
+```{r}
+embedding_dim<-20
+model <- keras_model_sequential() %>%
+layer_embedding(input_dim = max_words, output_dim = embedding_dim, input_length = maxlen) %>%
+layer_flatten() %>%
+layer_dense(units = 10, activation = "relu") %>%
+layer_dense(units = 1, activation = "sigmoid")
+```
+
+
+
+
+```{r}
+summary(model)
+```
+
+
+```{r}
+model %>% compile(
+optimizer = "rmsprop",
+loss = "binary_crossentropy",
+metrics = c("acc")
+)
+```
+
+
+
+```{r}
+history <- model %>% fit(
+x_train, y_train,
+epochs = 20,
+batch_size = 32,
+validation_data = list(x_val, y_val)
+)
+```
+
+```{r}
+plot(history)
+```
+
+```{r}
+model2 <- keras_model_sequential() %>%
+layer_embedding(input_dim = max_words, output_dim = embedding_dim) %>%
+#layer_gru(units = 28) %>%
+layer_simple_rnn(units = 28) %>%
+layer_dense(units = 1, activation = "sigmoid")
+summary(model2)
+```
+
+```{r}
+model2 %>% compile(
+optimizer = "rmsprop",
+loss = "binary_crossentropy",
+metrics = c("acc")
+)
+```
+
+
+```{r}
+history <- model2 %>% fit(
+x_train, y_train,
+epochs = 20,
+batch_size = 32,
+validation_data = list(x_val, y_val)
+)
+```
+
+
+
+```{r}
+plot(history)
+```
+
+
+```{r}
+glove_dir<-"~/Docencia/curs21_22/UB/MESIO/DL"
+lines <- readLines(file.path(glove_dir,"glove.6B.50d.txt"))
+```
+
+```{r}
+embeddings_index <- new.env(hash = TRUE, parent = emptyenv())
+# processat per obtenir un format llista del word embedding
+for (i in 1:length(lines)) {
+line <- lines[[i]]
+values <- strsplit(line, " ")[[1]]
+word <- values[[1]] # la paraula
+embeddings_index[[word]] <- as.double(values[-1]) # les coordenades de la paraula
+}
+cat("Found", length(embeddings_index), "word vectors.\n")
+```
+```{r}
+embeddings_index[["after"]]
+```
+
+```{r}
+embedding_dim <- 50 # dimension compatible with pretrained embedding
+embedding_matrix <- array(0, c(max_words, embedding_dim))
+for (word in names(word_index)) {
+index <- word_index[[word]]
+if (index < max_words) {
+embedding_vector <- embeddings_index[[word]]
+if (!is.null(embedding_vector))
+embedding_matrix[index+1,] <- embedding_vector
+}
+}
+dim(embedding_matrix)
+```
+
+
+
+
+```{r}
+model3 <- keras_model_sequential() %>%
+layer_embedding(input_dim = max_words, output_dim = embedding_dim) %>%
+#layer_gru(units = 28) %>%
+layer_simple_rnn(units = 28) %>%
+layer_dense(units = 1, activation = "sigmoid")
+summary(model2)
+```
+
+
+```{r}
+get_layer(model3, index = 1) %>%
+set_weights(list(embedding_matrix)) %>%
+freeze_weights()
+summary(model3)
+```
+
+
+```{r}
+model3 %>% compile(
+optimizer = "rmsprop",
+loss = "binary_crossentropy",
+metrics = c("acc")
+)
+```
+
+
+```{r}
+history <- model3 %>% fit(
+x_train, y_train,
+epochs = 20,
+batch_size = 32,
+validation_data = list(x_val, y_val)
+)
+```
+
+```{r}
+plot(history)
+```
