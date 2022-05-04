@@ -25,8 +25,8 @@ library(caret)
 library(ggplot2)
 
 library(png)
-library(imager)
-library(tfdatasets)
+#library(imager)
+#library(tfdatasets)
 
 set.seed(params$seed)
 ```
@@ -40,121 +40,83 @@ First we separate the data into two sets; a training set containing 2/3 of the d
 ```{r}
 set.seed(1234) # Making the setting of the seed more explicit (even though it is done in the setup already).
 
+image.path <- "./images"
+
 # We collect the names of all the images. 
-normal.image.names <- list.files("./normal")
-effusion.image.names <- list.files("./effusion")
+normal.image.names <- list.files(paste0(image.path,"/normal"))
+effusion.image.names <- list.files(paste0(image.path,"/effusion"))
 ```
 
-FUNKER IKKE Å EVALUERE NÅR RMD KOMPILERES!!
-
-```{r, cache = T, eval = F}
-# We make a tensor to fit the 500 images, of size 512*512 with 3 color channels. 
-normal.images <- array(rep(NA, 500*512*512*3), dim = c(500, 512, 512, 3))
+```{r, cache = T}
+img.width <- 512
+img.height <- 512
+# We make two tensors to fit the 500 images of both types respectively, of size 512*512 with 1 color channel. 
+normal.images <- effusion.images <- array(rep(NA, 500*img.width*img.height), dim = c(500, img.width, img.height))
 for (i in 1:500){
-  normal.images[i,,,] <- readPNG(paste0("normal/", normal.image.names[i]))
-  # This readPNG function could perhaps be replaced for load.image for Imager packager if that is better!
+  normal.images[i,,] <- readPNG(paste0(image.path, "/normal/",normal.image.names[i]))[,,1]
+  # readPNG assumes RGB images. Since ours are greyscale, R = G = B, and we can remove to color channels, which is why we have [,,1].
+  # Images are too big to train the model with images in memory!! Need to reshape or go back to generators!
+  # or use image_load from Keras to choose grayscale and target_size, but I do not know how to plot these e.g.
 }
 
-# We make a tensor to fit the 500 images, of size 512*512 with 3 color channels. 
-effusion.images <- array(rep(NA, 500*512*512*3), dim = c(500, 512, 512, 3))
+# We make a tensor to fit the 500 images, of size 512*512 with 1 color channel. 
 for (i in 1:500){
-  effusion.images[i,,,] <- readPNG(paste0("effusion/", effusion.image.names[i]))
-  # This readPNG function could perhaps be replaced for load.image for Imager packager if that is better!
+  effusion.images[i,,] <- readPNG(paste0(image.path, "/effusion/", effusion.image.names[i]))[,,1]
+  # readPNG assumes RGB images. Since ours are greyscale, R = G = B, and we can remove to color channels, which is why we have [,,1].
 }
 
-# I AM USING ALL MY RAM FOR THIS, THIS IS NOT A VIABLE OPTION!! HOW ELSE CAN IT BE DONE?
+# Must be some better way than to simply load it into memory? There are iterators etc, but have not completely figured them out yet!
 ```
 
 
-```{r, eval = F}
+```{r}
 # We plot one normal image to check that it has worked. 
-img <- normal.images[1,,,]
+img <- normal.images[1,,]
 plot(as.raster(img), main = "Normal X-ray Example", ylab = "", xlab = "")
 #rasterImage(img, 1.2, 1.0, 1.8, 2.0)
 
 # Similarly, we plot one effusion X-ray. 
-img <- effusion.images[1,,,]
+img <- effusion.images[1,,]
 plot(as.raster(img), main = "Effusion X-ray Example", ylab = "", xlab = "")
 #rasterImage(img, 1.2, 1.0, 1.8, 2.0)
 ```
 
-```{r, eval = F, results='hide'}
-# We load the files as a TensorFlow Dataset, following the guide
-# https://tensorflow.rstudio.com/tutorials/beginners/load/load_image/
-# This seems like a way better way of doing it, because it uses an iterator to only load one and one image!
+The data is split below. We select $\frac{2}{3}$ of each of the respective types of images for training, while the remaining data is used for testing. 
 
-normal.list.ds <- file_list_dataset("./normal/*")
-effusion.list.ds <- file_list_dataset("./effusion/*")
+```{r, cache = T}
+part <- 2/3
+num.images <- 500
+train.indices <- sample(1:num.images, size = part*num.images)
+normal.train <- normal.images[train.indices,,]
+normal.test <- normal.images[-train.indices,,]
 
-decode_img <- function(file_path, height = 512, width = 512) {
-  
-  size <- as.integer(c(height, width))
-  
-  file_path %>% 
-    tf$io$read_file() %>% 
-    tf$image$decode_jpeg(channels = 3) %>% 
-    tf$image$convert_image_dtype(dtype = tf$float64) %>% 
-    tf$image$resize(size = size)
-}
-
-normal.preprocess_path <- function(file_path) {
-  list(
-    decode_img(file_path),
-    to_categorical(TRUE)
-  )
-}
-
-effusion.preprocess_path <- function(file_path) {
-  list(
-    decode_img(file_path),
-    to_categorical(FALSE) # This does not make sense the way I have done it here, since it is all FALSE. 
-  )
-}
-
-normal.labeled.ds <- normal.list.ds %>% 
-  dataset_map(normal.preprocess_path, num_parallel_calls = tf$data$experimental$AUTOTUNE)
-
-effusion.labeled.ds <- effusion.list.ds %>% 
-  dataset_map(effusion.preprocess_path, num_parallel_calls = tf$data$experimental$AUTOTUNE)
-
-check.normal <- normal.labeled.ds %>% 
-  reticulate::as_iterator() %>% 
-  reticulate::iter_next() 
-
-check.normal
-plot(as.raster(as.array(check.normal[[1]])))
-
-
-check.effusion <- effusion.labeled.ds %>% 
-  reticulate::as_iterator() %>% 
-  reticulate::iter_next() 
-
-check.effusion
-plot(as.raster(as.array(check.effusion[[1]])))
-```
-
-The data is split below. 
-
-```{r, eval = F}
-train.indices <- sample(1:500, size = 2/3*500)
-normal.train <- normal.images[train.indices,,,]
-normal.test <- normal.images[-train.indices,,,]
-
-effusion.train <- effusion.images[train.indices,,,]
-effusion.test <- effusion.images[-train.indices,,,]
+effusion.train <- effusion.images[train.indices,,]
+effusion.test <- effusion.images[-train.indices,,]
 # Missing labels here also. 
 
 # Used when loading all images to RAM, which should not be done!!
-gc() # Run garbage collection to remove unused variables (to restore RAM). 
+#gc() # Run garbage collection to remove unused variables (to restore RAM). 
+
+x.train <- k_concatenate(list(normal.train, effusion.train), axis = 1)
+# Label "normal" as 0 and "effusion" as 1.
+#y.train <- to_categorical(c(rep(0, part*num.images), rep(1, part*num.images))) # for softmax and two output nodes. 
+y.train <- c(rep(0, part*num.images), rep(1, part*num.images))
+
+x.test <- k_concatenate(list(normal.test, effusion.test), axis = 1)
+# Label "normal" as 0 and "effusion" as 1.
+#y.test <- to_categorical(c(rep(0, num.images-round(part*num.images)), rep(1, num.images-round(part*num.images)))) # for softmax and two output nodes. 
+y.test <- c(rep(0, num.images-round(part*num.images)), rep(1, num.images-round(part*num.images)))
+
+gc() # Run Garbage Collection to free up memory from unused variables.
 ```
 
 # Convolutional Neural Network (CNN) Implementation
 
 We implement a CNN with the following architecture. 
 
-```{r, eval = F}
+```{r}
 model <- keras_model_sequential() %>%
-layer_conv_2d(filters=32, kernel_size=3, activation = "relu", input_shape=c(64, 64, 3)) %>%
+layer_conv_2d(filters=32, kernel_size=3, activation = "relu", input_shape=c(img.width, img.height, 1)) %>%
 layer_max_pooling_2d(pool_size = c(2,2)) %>%
 layer_conv_2d(filters=64, kernel_size=3, activation = "relu") %>%
 layer_max_pooling_2d(pool_size = c(2,2)) %>%
@@ -163,42 +125,16 @@ layer_max_pooling_2d(pool_size = c(2,2)) %>%
 layer_conv_2d(filters=128, kernel_size=3, activation = "relu") %>%
 layer_max_pooling_2d(pool_size = c(2,2)) %>%
 layer_flatten() %>%
-layer_dense(units = 512, activation = 'relu') %>%
+layer_dense(units = 256, activation = 'relu') %>%
 layer_dense(units = 1, activation = 'sigmoid')
 summary(model)
-```
-
-DOING SOME TESTING WITH THE ITERATOR DATA SET, FOLLOWING THE GUIDE FROM TENSORFLOW I LINKED TO ABOVE. DOES NOT WORK. 
-
-```{r, eval = F}
-model <- keras_model_sequential() %>% 
-  layer_flatten() %>% 
-  layer_dense(units = 128, activation = "relu") %>% 
-  layer_dense(units = 128, activation = "relu") %>% 
-  layer_dense(units = 5, activation = "softmax")
-
-model %>% 
-  compile(
-    loss = "categorical_crossentropy",
-    optimizer = "adam",
-    metrics = "accuracy"
-  )
-
-
-# Does not work to fit with this "iterator data". Not sure how to solve the problem I am having with importing the data tbh!
-model %>% 
-  fit(
-    normal.labeled.ds %>% dataset_prefetch(buffer_size = tf$data$experimental$AUTOTUNE),
-    epochs = 5,
-    verbose = 2
-  )
 ```
 
 # CNN Training
 
 We define the CNN with choice of optimizer, loss function, metrics.etc. DETTE BØR NOK FINSKRIVES NOE!!
 
-```{r, eval = F}
+```{r}
 model %>% compile(
   loss = 'binary_crossentropy',
   optimizer = optimizer_adadelta(),
@@ -206,16 +142,16 @@ model %>% compile(
 )
 
 history <- model %>% fit(
-  x = encoded_expression1,
-  y = encoded_expression1,
+  x = x.train,
+  y = y.train,
   epochs = 100,
   batch_size = 64,
-  validation_split = 0.2,
-  callbacks = callback.parameters
+  validation_split = 0.2
+  
+  #,callbacks = callback.parameters
 )
 plot(history)
 ```
-
 
 # Tuning of Hyperparameter
 
