@@ -39,75 +39,75 @@ First we separate the data into two sets; a training set containing 2/3 of the d
 
 ```{r}
 set.seed(1234) # Making the setting of the seed more explicit (even though it is done in the setup already).
+img_width <- 64 # or 256, 128, 64 or 32 (try different sizes)!
+img_height <- 64
+target_size <- c(img_width, img_height)
+batch_size <- 32
+epochs <- 30
+channels <- 3 # RGB = 3 channels
+image_size <- c(target_size, channels)
 
-image.path <- "./images"
+# optional data augmentation.
+train_data_gen <- image_data_generator(
+  rescale = 1/255, 
+  validation_split = 1/3,
+  rotation_range = 40,
+  width_shift_range = 0.2,
+  height_shift_range = 0.2,
+  shear_range = 0.2,
+  zoom_range = 0.2,
+  horizontal_flip = TRUE,
+  fill_mode = "nearest"
+)
 
-# We collect the names of all the images. 
-normal.image.names <- list.files(paste0(image.path,"/normal"))
-effusion.image.names <- list.files(paste0(image.path,"/effusion"))
+# Then we load the data using the generators. 
+# training images.
+train.image_array_gen <- flow_images_from_directory("images", 
+                                                    train_data_gen,
+                                                    class_mode = "binary",
+                                                    seed = 1234, # Change to params$seed in Rmd.
+                                                    target_size = target_size,
+                                                    batch_size = batch_size,
+                                                    #color_mode = "grayscale",
+                                                    subset = "training")
+
+# testing (or possibly validation) images. 
+val.image_array_gen <- flow_images_from_directory("images", 
+                                                   train_data_gen,
+                                                   class_mode = "binary",
+                                                   seed = 1234, # Change to params$seed in Rmd.
+                                                   target_size = target_size,
+                                                   batch_size = batch_size,
+                                                   #color_mode = "grayscale",
+                                                   subset = "validation")
+
+# number of training samples
+train_samples <- train.image_array_gen$n
+# number of validation samples
+valid_samples <- val.image_array_gen$n
+
+# Element generate
+batch <- generator_next(train.image_array_gen)
+
+str(batch)
+
 ```
 
-```{r, cache = T}
-img.width <- 512
-img.height <- 512
-# We make two tensors to fit the 500 images of both types respectively, of size 512*512 with 1 color channel. 
-normal.images <- effusion.images <- array(rep(NA, 500*img.width*img.height), dim = c(500, img.width, img.height))
-for (i in 1:500){
-  normal.images[i,,] <- readPNG(paste0(image.path, "/normal/",normal.image.names[i]))[,,1]
-  # readPNG assumes RGB images. Since ours are greyscale, R = G = B, and we can remove to color channels, which is why we have [,,1].
-  # Images are too big to train the model with images in memory!! Need to reshape or go back to generators!
-  # or use image_load from Keras to choose grayscale and target_size, but I do not know how to plot these e.g.
-}
-
-# We make a tensor to fit the 500 images, of size 512*512 with 1 color channel. 
-for (i in 1:500){
-  effusion.images[i,,] <- readPNG(paste0(image.path, "/effusion/", effusion.image.names[i]))[,,1]
-  # readPNG assumes RGB images. Since ours are greyscale, R = G = B, and we can remove to color channels, which is why we have [,,1].
-}
-
-# Must be some better way than to simply load it into memory? There are iterators etc, but have not completely figured them out yet!
-```
-
+We plot some of the loaded images, to see what they look like. 
 
 ```{r}
-# We plot one normal image to check that it has worked. 
-img <- normal.images[1,,]
-plot(as.raster(img), main = "Normal X-ray Example", ylab = "", xlab = "")
-#rasterImage(img, 1.2, 1.0, 1.8, 2.0)
+# Vi plotter bildene for å se hvordan data augmentation fungerer!
+op <- par(mfrow = c(2, 2), pty = "s", mar = c(1, 0, 1, 0))
+for (i in 1:4) {
+  plot(as.raster(batch[[1]][i,,,]))
+}
 
-# Similarly, we plot one effusion X-ray. 
-img <- effusion.images[1,,]
-plot(as.raster(img), main = "Effusion X-ray Example", ylab = "", xlab = "")
-#rasterImage(img, 1.2, 1.0, 1.8, 2.0)
 ```
 
 The data is split below. We select $\frac{2}{3}$ of each of the respective types of images for training, while the remaining data is used for testing. 
 
 ```{r, cache = T}
-part <- 2/3
-num.images <- 500
-train.indices <- sample(1:num.images, size = part*num.images)
-normal.train <- normal.images[train.indices,,]
-normal.test <- normal.images[-train.indices,,]
-
-effusion.train <- effusion.images[train.indices,,]
-effusion.test <- effusion.images[-train.indices,,]
-# Missing labels here also. 
-
-# Used when loading all images to RAM, which should not be done!!
-#gc() # Run garbage collection to remove unused variables (to restore RAM). 
-
-x.train <- k_concatenate(list(normal.train, effusion.train), axis = 1)
-# Label "normal" as 0 and "effusion" as 1.
-#y.train <- to_categorical(c(rep(0, part*num.images), rep(1, part*num.images))) # for softmax and two output nodes. 
-y.train <- c(rep(0, part*num.images), rep(1, part*num.images))
-
-x.test <- k_concatenate(list(normal.test, effusion.test), axis = 1)
-# Label "normal" as 0 and "effusion" as 1.
-#y.test <- to_categorical(c(rep(0, num.images-round(part*num.images)), rep(1, num.images-round(part*num.images)))) # for softmax and two output nodes. 
-y.test <- c(rep(0, num.images-round(part*num.images)), rep(1, num.images-round(part*num.images)))
-
-gc() # Run Garbage Collection to free up memory from unused variables.
+# Hvordan kan jeg splitte når jeg bruker generatorene?!
 ```
 
 # Convolutional Neural Network (CNN) Implementation
@@ -116,19 +116,26 @@ We implement a CNN with the following architecture.
 
 ```{r}
 model <- keras_model_sequential() %>%
-layer_conv_2d(filters=32, kernel_size=3, activation = "relu", input_shape=c(img.width, img.height, 1)) %>%
-layer_max_pooling_2d(pool_size = c(2,2)) %>%
-layer_conv_2d(filters=64, kernel_size=3, activation = "relu") %>%
-layer_max_pooling_2d(pool_size = c(2,2)) %>%
-layer_conv_2d(filters=128, kernel_size=3, activation = "relu") %>%
-layer_max_pooling_2d(pool_size = c(2,2)) %>%
-layer_conv_2d(filters=128, kernel_size=3, activation = "relu") %>%
-layer_max_pooling_2d(pool_size = c(2,2)) %>%
-layer_flatten() %>%
-layer_dense(units = 256, activation = 'relu') %>%
-layer_dense(units = 1, activation = 'sigmoid')
+  layer_conv_2d(filters = 32, kernel_size = c(3, 3), activation = "relu", 
+                padding="same",
+                input_shape = image_size) %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_dropout(rate = 0.5) %>%
+  layer_conv_2d(filters = 64, kernel_size = c(3, 3), activation = "relu", 
+                padding="same") %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_conv_2d(filters = 128, kernel_size = c(3, 3), activation = "relu") %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_flatten() %>%
+  layer_dense(units = 512, activation = "relu",
+              kernel_regularizer = regularizer_l2(l = 0.01)) %>%
+  layer_dropout(rate = 0.4) %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
 summary(model)
 ```
+
+We have implemented a CNN with three concolutional layers and one fully connected dense hidden layer. In between we have added some max pooling layers, some layer dropout and a kernel L2 regularizer in the fully connected dense hidden layer, in order to combat overfitting. TESTER ANDRE MODELLER I "importing_images.R".
 
 # CNN Training
 
@@ -136,21 +143,26 @@ We define the CNN with choice of optimizer, loss function, metrics.etc. DETTE B�
 
 ```{r}
 model %>% compile(
-  loss = 'binary_crossentropy',
-  optimizer = optimizer_adadelta(),
-  metrics = c('accuracy')
+  loss = "binary_crossentropy",
+  #optimizer = "adam", # Adam fungerer dårlig her virker det som på meg!
+  optimizer = optimizer_rmsprop(learning_rate = 1e-4), # decay does not seem to work very well. 
+  #optimizer = optimizer_adadelta(),
+  metrics = c("accuracy")
 )
-
-history <- model %>% fit(
-  x = x.train,
-  y = y.train,
-  epochs = 100,
-  batch_size = 64,
-  validation_split = 0.2
+history <- model %>% fit( # Or fit_generator?
+  train.image_array_gen,
+  # epochs
+  steps_per_epoch = as.integer(train_samples / batch_size), 
+  epochs = epochs, 
   
-  #,callbacks = callback.parameters
+  # validation data
+  validation_data = val.image_array_gen,
+  validation_steps = as.integer(valid_samples / batch_size),
 )
 plot(history)
+
+#model %>% save_model_hdf5(paste0("cifar10_",i,"_",j,"_finetuningtransferlearning.h5"))
+# Hva gjør egentlig denne? Lagrer med ferdige trente weights og alt? Søk opp i docs når R er ledig!
 ```
 
 # Tuning of Hyperparameter
@@ -170,12 +182,17 @@ callback.parameters <- callback_early_stopping(
   restore_best_weights = FALSE
 )
 
-history <- model %>% fit(
-  x = encoded_expression1,
-  y = encoded_expression1,
-  epochs = 100,
-  batch_size = batch.size,
-  validation_split = 0.2,
+history <- model %>% fit( # Or fit_generator?
+  train.image_array_gen,
+  # epochs
+  steps_per_epoch = as.integer(train_samples / batch_size), 
+  epochs = epochs, 
+  
+  # validation data
+  validation_data = val.image_array_gen,
+  validation_steps = as.integer(valid_samples / batch_size),
+  
+  # Add callbacks for early stopping. 
   callbacks = callback.parameters
 )
 plot(history)
@@ -280,4 +297,6 @@ dim(dec_output_cifra)
 # Graphical Representation of Results
 
 We represent graphically the results from the test images to show the association between the activations in the $z$ layer and the class images. DO I USE GRADCAM HERE??
+
+Ta en titt i cifar10_2classes "Visualizing what convnets learn". 
  
