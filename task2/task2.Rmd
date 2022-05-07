@@ -26,7 +26,7 @@ library(ggplot2)
 
 library(png)
 #library(imager)
-#library(tfdatasets)
+library(tfdatasets)
 
 set.seed(params$seed)
 ```
@@ -35,10 +35,122 @@ The objective of this task is diagnosis of chest X-ray images. More specifically
 
 We are given two data sets of images; 500 normal X-ray images and 500 X-ray images with effusion. This data will be used to construct models for diagnosis of future images. 
 
-First we separate the data into two sets; a training set containing 2/3 of the data and a test set containing the remaining 1/3. 
+# Preprocessing
+
+First we separate the data into two sets; a training set containing 2/3 of the data and a test set containing the remaining 1/3. In order to do this, we assume that both sets of images are saved in a directory called "images". This directory contains the 500 normal X-ray images in a sub directory called "normal", and the 500 X-ray images with diffusion in a sub directory called "effusion". The images are given in png format. 
+
+We create two new sub directories using within the "images" directory; one called "test", which contains the randomly sampled test data, and one called "train", which contains the randomly sampled training data. We assume that these directories have not been created on the computer earlier. 
 
 ```{r}
-set.seed(1234) # Making the setting of the seed more explicit (even though it is done in the setup already).
+set.seed(params$seed) # Set seed to 1234, as chosen in params. 
+image.path <- "./images"
+normal.path <- paste0(image.path, "/normal")
+effusion.path <- paste0(image.path, "/effusion") 
+train.path <- paste0(image.path, "/train") # New path for training images. 
+test.path <- paste0(image.path, "/test") # New path for test images. 
+train.normal.path <- paste0(train.path, "/normal") 
+train.effusion.path <- paste0(train.path, "/effusion")
+test.normal.path <- paste0(test.path, "/normal") 
+test.effusion.path <- paste0(test.path, "/effusion")
+
+# We collect the names of all the images.
+normal.image.names <- list.files(normal.path)
+effusion.image.names <- list.files(effusion.path)
+
+# We create the two new directories. If they already exist, a warning is printed. 
+dir.create(train.path)
+dir.create(test.path)
+
+# We also create "effusion" and "normal" sub directories inside the new "train" and "test" directories. 
+# This is needed to get images for models later. 
+dir.create(train.normal.path)
+dir.create(test.normal.path)
+dir.create(train.effusion.path)
+dir.create(test.effusion.path)
+
+# We fill the newly created sub folders with randomly sampled data. 
+# We know that the images are named (for example) "normal0.png" and "effusion0.png", 
+# with numbers ranging from 0 to 499. We check that this is the case below. 
+all(sort(parse_number(normal.image.names)) == 0:499)
+all(sort(parse_number(effusion.image.names)) == 0:499)
+
+# We sample from 0:499, in order to choose training numbers.
+train.numbers <- sample(0:499, size = 2/3*500)
+# Find testing numbers as well, simply using a set difference. 
+test.numbers <- setdiff(0:499, train.numbers)
+
+# Next we select the image names corresponding to the indices sampled above. 
+normal.image.names <- data.frame(normal.image.names)
+effusion.image.names <- data.frame(effusion.image.names)
+
+# Select image names corresponding to training numbers sampled above. 
+train.normal <- normal.image.names %>% dplyr::filter(parse_number(normal.image.names) %in% train.numbers)
+train.normal <- train.normal$normal.image.names # Change data type of names to vector. 
+all(sort(parse_number(train.normal)) == sort(train.numbers)) # Check that we have selected the correct names.
+
+test.normal <- normal.image.names %>% dplyr::filter(parse_number(normal.image.names) %in% test.numbers)
+test.normal <- test.normal$normal.image.names # Change data type of names to vector. 
+all(sort(parse_number(test.normal)) == sort(test.numbers)) # Check that we have selected the correct names.
+
+# We sample from 0:499, in order to choose training numbers. We do it again for the effusion images, 
+# in case the indices of the two types of images are not chosen randomly (we do not know how the images are named by the source).
+train.numbers <- sample(0:499, size = 2/3*500)
+# Find testing numbers as well, simply using a set difference. 
+test.numbers <- setdiff(0:499, train.numbers)
+
+# Next we select the image names corresponding to the indices sampled above. 
+normal.image.names <- data.frame(normal.image.names)
+effusion.image.names <- data.frame(effusion.image.names)
+
+train.effusion <- effusion.image.names %>% dplyr::filter(parse_number(effusion.image.names) %in% train.numbers)
+train.effusion <- train.effusion$effusion.image.names # Change data type of names to vector. 
+all(sort(parse_number(train.effusion)) == sort(train.numbers)) # Check that we have selected the correct names.
+
+test.effusion <- effusion.image.names %>% dplyr::filter(parse_number(effusion.image.names) %in% test.numbers)
+test.effusion <- test.effusion$effusion.image.names # Change data type of names to vector. 
+all(sort(parse_number(test.effusion)) == sort(test.numbers)) # Check that we have selected the correct names.
+
+
+# Now that we have all the file names, we copy them into their respective directories. 
+#apply(train.normal, FUN = file.copy, from = paste0(image.path,"/normal"), to = paste0(image.path, "/train"))
+for (i in 1:length(train.numbers)){
+  name <- train.normal[i]
+  file.copy(from = paste0(normal.path, "/", name), to = train.normal.path)
+  
+  name <- train.effusion[i]
+  file.copy(from = paste0(effusion.path, "/", name), to = train.effusion.path)
+}
+
+# Må lage subdirectories per class!!
+
+for (i in 1:length(test.numbers)){
+  name <- test.normal[i] 
+  file.copy(from = paste0(normal.path, "/", name), to = test.normal.path)
+  
+  name <- test.effusion[i]
+  file.copy(from = paste0(effusion.path, "/", name), to = test.effusion.path)
+}
+
+# Check that it worked!
+train.normal.new <- list.files(train.normal.path)
+length(train.normal.new)
+all(train.normal.new == train.normal)
+train.effusion.new <- list.files(train.effusion.path)
+length(train.effusion.new)
+all(train.effusion.new == train.effusion)
+test.normal.new <- list.files(test.normal.path)
+length(test.normal.new)
+all(test.normal.new == test.normal)
+test.effusion.new <- list.files(test.effusion.path)
+length(test.effusion.new)
+all(test.effusion.new == test.effusion)
+```
+
+# Image Data Generators 
+
+We make image data generators in order to work with models. 
+
+```{r}
 img_width <- 64 # or 256, 128, 64 or 32 (try different sizes)!
 img_height <- 64
 target_size <- c(img_width, img_height)
@@ -62,7 +174,7 @@ train_data_gen <- image_data_generator(
 
 # Then we load the data using the generators. 
 # training images.
-train.image_array_gen <- flow_images_from_directory("images", 
+train.image_array_gen <- flow_images_from_directory(train.path, 
                                                     train_data_gen,
                                                     class_mode = "binary",
                                                     seed = 1234, # Change to params$seed in Rmd.
@@ -71,8 +183,8 @@ train.image_array_gen <- flow_images_from_directory("images",
                                                     #color_mode = "grayscale",
                                                     subset = "training")
 
-# testing (or possibly validation) images. 
-val.image_array_gen <- flow_images_from_directory("images", 
+# validation images. 
+val.image_array_gen <- flow_images_from_directory(train.path, 
                                                    train_data_gen,
                                                    class_mode = "binary",
                                                    seed = 1234, # Change to params$seed in Rmd.
@@ -81,14 +193,24 @@ val.image_array_gen <- flow_images_from_directory("images",
                                                    #color_mode = "grayscale",
                                                    subset = "validation")
 
+test.image_array_gen <- flow_images_from_directory(test.path, 
+                                                    train_data_gen,
+                                                    class_mode = "binary",
+                                                    seed = 1234, # Change to params$seed in Rmd.
+                                                    target_size = target_size,
+                                                    batch_size = batch_size,
+                                                    #color_mode = "grayscale"
+                                                    )
+
 # number of training samples
 train_samples <- train.image_array_gen$n
 # number of validation samples
 valid_samples <- val.image_array_gen$n
+# number of testing samples
+test_samples <- test.image_array_gen$n
 
 # Element generate
 batch <- generator_next(train.image_array_gen)
-
 str(batch)
 
 ```
@@ -96,18 +218,12 @@ str(batch)
 We plot some of the loaded images, to see what they look like. 
 
 ```{r}
-# Vi plotter bildene for å se hvordan data augmentation fungerer!
+# We plot some of the training images to see what they look like. 
 op <- par(mfrow = c(2, 2), pty = "s", mar = c(1, 0, 1, 0))
 for (i in 1:4) {
   plot(as.raster(batch[[1]][i,,,]))
 }
 
-```
-
-The data is split below. We select $\frac{2}{3}$ of each of the respective types of images for training, while the remaining data is used for testing. 
-
-```{r, cache = T}
-# Hvordan kan jeg splitte når jeg bruker generatorene?!
 ```
 
 # Convolutional Neural Network (CNN) Implementation
