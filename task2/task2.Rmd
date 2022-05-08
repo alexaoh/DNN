@@ -37,7 +37,7 @@ We are given two data sets of images; 500 normal X-ray images and 500 X-ray imag
 
 # Preprocessing
 
-First we separate the data into two sets; a training set containing 2/3 of the data and a test set containing the remaining 1/3. In order to do this, we assume that both sets of images are saved in a directory called "images". This directory contains the 500 normal X-ray images in a sub directory called "normal", and the 500 X-ray images with diffusion in a sub directory called "effusion". The images are given in png format. 
+First we separate the data into two sets; a training set containing $\frac23$ of the data and a test set containing the remaining $\frac13$. In order to do this, we assume that both sets of images are saved in a directory called "images". This directory contains the 500 normal X-ray images in a sub directory called "normal", and the 500 X-ray images with diffusion in a sub directory called "effusion". The images are given in png format. 
 
 We create two new sub directories using within the "images" directory; one called "test", which contains the randomly sampled test data, and one called "train", which contains the randomly sampled training data. We assume that these directories have not been created on the computer earlier. 
 
@@ -46,12 +46,16 @@ set.seed(params$seed) # Set seed to 1234, as chosen in params.
 image.path <- "./images"
 normal.path <- paste0(image.path, "/normal")
 effusion.path <- paste0(image.path, "/effusion") 
+
+# New path for training and test images. 
 train.path <- paste0(image.path, "/train") # New path for training images. 
 test.path <- paste0(image.path, "/test") # New path for test images. 
-train.normal.path <- paste0(train.path, "/normal") 
-train.effusion.path <- paste0(train.path, "/effusion")
-test.normal.path <- paste0(test.path, "/normal") 
-test.effusion.path <- paste0(test.path, "/effusion")
+
+# Sub directories of the above paths, for training and test images, split up into "normal" and "effusion":
+train.normal.path <- paste0(train.path, "/normal") # New path for normal train images . 
+train.effusion.path <- paste0(train.path, "/effusion") # New path for effusion train images.
+test.normal.path <- paste0(test.path, "/normal") # New path for normal test images.  
+test.effusion.path <- paste0(test.path, "/effusion") # New path for effusion test images. 
 
 # We collect the names of all the images.
 normal.image.names <- list.files(normal.path)
@@ -121,8 +125,6 @@ for (i in 1:length(train.numbers)){
   file.copy(from = paste0(effusion.path, "/", name), to = train.effusion.path)
 }
 
-# Må lage subdirectories per class!!
-
 for (i in 1:length(test.numbers)){
   name <- test.normal[i] 
   file.copy(from = paste0(normal.path, "/", name), to = test.normal.path)
@@ -148,11 +150,11 @@ all(test.effusion.new == test.effusion)
 
 # Image Data Generators 
 
-We make image data generators in order to work with models. 
+We make image data generators in order to work with models. These are image processing helper tools from Keras, which are used to turn image files on disk into batches of pre-processed tensors. The function `image_data_generator` can be used to generate batches with real-time data augmentation. Thus, this function can be used to pre-process the images. We rescale the images in $[0,1]$ using this function. The function `flow_images_from_directory` takes, among others, a directory and an image generator as input, and generates batches of images from the specified directory, following the pre-processing rules given in the generator. We also choose the target size of the images, i.e. the width and height, where the original images are $512 \times 512$. We also choose a validation split of $\frac15$, which means that one fifth of the training data will be used for model validation under fitting. 
 
 ```{r}
-img_width <- 64 # or 256, 128, 64 or 32 (try different sizes)!
-img_height <- 64
+img_width <- 128 # or 256, 128, 64 or 32 (try different sizes)!
+img_height <- 128
 target_size <- c(img_width, img_height)
 batch_size <- 32
 epochs <- 30
@@ -161,15 +163,19 @@ image_size <- c(target_size, channels)
 
 # optional data augmentation.
 train_data_gen <- image_data_generator(
-  rescale = 1/255, 
-  validation_split = 1/3,
-  rotation_range = 40,
-  width_shift_range = 0.2,
-  height_shift_range = 0.2,
-  shear_range = 0.2,
-  zoom_range = 0.2,
-  horizontal_flip = TRUE,
-  fill_mode = "nearest"
+  rescale = 1/255,
+  validation_split = 1/5
+  # ,rotation_range = 40,
+  # width_shift_range = 0.2,
+  # height_shift_range = 0.2,
+  # shear_range = 0.2,
+  # zoom_range = 0.2,
+  # horizontal_flip = TRUE,
+  # fill_mode = "nearest"
+)
+
+test_data_gen <- image_data_generator(
+  rescale = 1/255
 )
 
 # Then we load the data using the generators. 
@@ -187,19 +193,21 @@ train.image_array_gen <- flow_images_from_directory(train.path,
 val.image_array_gen <- flow_images_from_directory(train.path, 
                                                    train_data_gen,
                                                    class_mode = "binary",
-                                                   seed = 1234, # Change to params$seed in Rmd.
+                                                   seed = params$seed, # Change to params$seed in Rmd.
                                                    target_size = target_size,
                                                    batch_size = batch_size,
                                                    #color_mode = "grayscale",
                                                    subset = "validation")
 
 test.image_array_gen <- flow_images_from_directory(test.path, 
-                                                    train_data_gen,
+                                                    test_data_gen,
                                                     class_mode = "binary",
-                                                    seed = 1234, # Change to params$seed in Rmd.
+                                                    seed = params$seed, # Change to params$seed in Rmd.
                                                     target_size = target_size,
-                                                    batch_size = batch_size,
-                                                    #color_mode = "grayscale"
+                                                    batch_size = 1,
+                                                    #color_mode = "grayscale", 
+                                                    shuffle = F # Makes it easier to check with 
+                                                    # true class labels after predicting. 
                                                     )
 
 # number of training samples
@@ -209,26 +217,33 @@ valid_samples <- val.image_array_gen$n
 # number of testing samples
 test_samples <- test.image_array_gen$n
 
-# Element generate
+# Class index decoding. 
+d1 <- cbind(c("effusion", "normal"), 
+            c(train.image_array_gen$class_indices$effusion, 
+              train.image_array_gen$class_indices$normal))
+knitr::kable(d1, caption = "Encoding")
+```
+
+The generators yield the batches indefinitely, which means that they act like infinite loops over the images in the specified directories. 
+
+We have a short look at some of the images from the training data set, to get a feel for what the pictures may look like. Notice that the normal class of images is decoded as 1 and the effusion class of images is decoded as 0. This choice is insignificant for us and is chosen by the image generators. 
+
+```{r}
+# Element generate.
 batch <- generator_next(train.image_array_gen)
 str(batch)
 
-```
-
-We plot some of the loaded images, to see what they look like. 
-
-```{r}
-# We plot some of the training images to see what they look like. 
 op <- par(mfrow = c(2, 2), pty = "s", mar = c(1, 0, 1, 0))
-for (i in 1:4) {
-  plot(as.raster(batch[[1]][i,,,]))
+for (i in seq(5, 11, 2)) {
+  plot(as.raster(batch[[1]][i,,,]), main = paste0("Label: ", batch[[2]][i]))
 }
-
 ```
 
 # Convolutional Neural Network (CNN) Implementation
 
-We implement a CNN with the following architecture. 
+We have implemented a CNN with three concolutional layers and one fully connected dense hidden layer. This fully connected layer has the same amount of nodes as the image height / width. In between we have added some max pooling layers, some layer dropout and a kernel L2 regularizer in the fully connected dense hidden layer, in order to combat overfitting. 
+
+TESTER ANDRE MODELLER I "importing_images.R".
 
 ```{r}
 model <- keras_model_sequential() %>%
@@ -243,7 +258,7 @@ model <- keras_model_sequential() %>%
   layer_conv_2d(filters = 128, kernel_size = c(3, 3), activation = "relu") %>%
   layer_max_pooling_2d(pool_size = c(2, 2)) %>%
   layer_flatten() %>%
-  layer_dense(units = 512, activation = "relu",
+  layer_dense(units = img_width, activation = "relu",
               kernel_regularizer = regularizer_l2(l = 0.01)) %>%
   layer_dropout(rate = 0.4) %>%
   layer_dense(units = 1, activation = "sigmoid")
@@ -251,21 +266,26 @@ model <- keras_model_sequential() %>%
 summary(model)
 ```
 
-We have implemented a CNN with three concolutional layers and one fully connected dense hidden layer. In between we have added some max pooling layers, some layer dropout and a kernel L2 regularizer in the fully connected dense hidden layer, in order to combat overfitting. TESTER ANDRE MODELLER I "importing_images.R".
-
 # CNN Training
 
-We define the CNN with choice of optimizer, loss function, metrics.etc. DETTE BØR NOK FINSKRIVES NOE!!
+We define the CNN with choice of optimizer, loss function and metric, before we fit the model. We choose the `binary_crossentropy` as loss function, because we have defined the model with one node in the output layer, with sigmoid activation function. Moreover, we choose `rmsprop` as optimizer, because it seems like this gives the greatest performance when comparing to other optimizers, like `adam` and `adadelta`. Finally, we use `accuracy` as the metric, since we want the model to diagnose the images with the greatest accuracy possible. 
+
+After defining the model conveniently, we fit the model. Because the image generators loop endlessly over the images on disk, we need to specify the total number of steps, or batches, before declaring on epoch as finished. Since we are using a generator for both the training data and the validation data, we need to specify this value for both the training data and the validation data. This is done with the arguments `steps_per_epoch` and `validation_steps` below. 
 
 ```{r}
 model %>% compile(
   loss = "binary_crossentropy",
-  #optimizer = "adam", # Adam fungerer dårlig her virker det som på meg!
+  #optimizer = optimizer_adam(), # Adam is slow and gives worse performance it seems like. 
   optimizer = optimizer_rmsprop(learning_rate = 1e-4), # decay does not seem to work very well. 
-  #optimizer = optimizer_adadelta(),
+  #optimizer = optimizer_adadelta() # Adadelta is slower and gives worse performance it seems like. 
   metrics = c("accuracy")
 )
-history <- model %>% fit( # Or fit_generator?
+
+# We save the model and its state (before fitting), so that 
+# it can be used when tuning the hyperparameter. 
+model %>% save_model_hdf5("convnet.h5")
+
+history <- model %>% fit(
   train.image_array_gen,
   # epochs
   steps_per_epoch = as.integer(train_samples / batch_size), 
@@ -276,29 +296,30 @@ history <- model %>% fit( # Or fit_generator?
   validation_steps = as.integer(valid_samples / batch_size),
 )
 plot(history)
-
-#model %>% save_model_hdf5(paste0("cifar10_",i,"_",j,"_finetuningtransferlearning.h5"))
-# Hva gjør egentlig denne? Lagrer med ferdige trente weights og alt? Søk opp i docs når R er ledig!
 ```
 
 # Tuning of Hyperparameter
 
 We tune the hyperparameter `batch_size` using the `tfruns` package. This is done exploring the grid `r c(16, 32, 64)` for the values of the hyperparameter. 
 
+This is done in separate files, which are delivered with this report and Rmd. For each of the values in the grid we want to explore, we load the saved model and fit it with the data generators defined using the respective batch size we want to test for. We need to redefine the data generators for each of the three models, because they decide the batch sizes. 
+
+The results from running the file `task2_tfruns.R`, which calls on `task2_explore.R` for each different batch size on the grid, seem to show that a batch size of 64 yields the best results, according to the metric validation accuracy. 
+
 # Early Stopping
 
-We implement early stopping in the model, using the `keras callbacks()` API. The training is interrupted when validation accuracy stops improving for more than two epochs. 
+We implement early stopping in the model, using the `keras callbacks()` API. The training is interrupted when validation accuracy stops improving (increasing) for more than two epochs. 
 
-```{r, eval = F}
+```{r}
 callback.parameters <- callback_early_stopping(
-  monitor = "val_loss",
-  patience = 2, # This argument is used to interrupt training when validation accuracy stops improving for more than two epochs. 
+  monitor = "val_accuracy",
+  patience = 2, # This argument is used to interrupt training when
+  # validation accuracy stops improving (increasing) for more than two epochs. 
   verbose = 1,
-  mode = "min",
-  restore_best_weights = FALSE
+  mode = "max"
 )
 
-history <- model %>% fit( # Or fit_generator?
+history <- model %>% fit( 
   train.image_array_gen,
   # epochs
   steps_per_epoch = as.integer(train_samples / batch_size), 
@@ -314,57 +335,64 @@ history <- model %>% fit( # Or fit_generator?
 plot(history)
 ```
 
-
 # Performance Assessment
 
-We assess the performance of the CNN by predicting the categories of the test images. The confusion matrix is given. 
+We assess the performance of the CNN by predicting the categories of the test images. The confusion matrix is given.
 
-```{r, eval = F}
-# keras/tensorflow version >= 2.6
-# se obtiene un objeto tf.tensor
-y_pred <- model %>% predict(x_test) %>% k_argmax()
-# se pasa a vector
-# https://tensorflow.rstudio.com/guide/tensorflow/tensors/
-y_pred <- y_pred %>% shape() %>% unlist()
-confusionMatrix(as.factor(DATATESTLABELS), as.factor(y_pred))
+First we evaluate the model to get an idea of how well the model can predict on the test images. Notice that we, again, have to specify the total number of steps before declaring the evaluation round finished, which is done using the `steps` argument in the `evaluate` function. For the test data generator we have defined the batch size as 1, such that we simply evaluate every test image once during evaluation and prediction. 
+
+```{r}
+model %>% evaluate(test.image_array_gen, steps = test_samples)
 ```
 
+Next we make predictions on every test image. 
+
+```{r}
+#test.image_array_gen$reset() # Done in case such that nothing will go wrong. 
+y_pred <- model %>% predict(test.image_array_gen, steps = test_samples) %>% 
+    `>`(0.5) %>% k_cast("int32")
+y_pred <- as.array(y_pred)
+confusionMatrix(as.factor(test.image_array_gen$classes), as.factor(y_pred))
+```
+
+The confusion matrix shows that the model performs very badly on the test images, rendering it useless in practice. 
+
+We can see that most of the errors the model makes is when predicting normal images (1) as having an effusion (0), i.e. it often predicts effusion on X-ray images that in reality are normal. When predicting images as normal, it makes a lot less mistakes, since most of the predictions are normal according to the true labels. 
 
 # Convolutional Autoencoder (CAE) Implementation
 
-We implement a CAE with 10 nodes in the $z$ layer (the bottleneck). The number of convolutional layers, filter sizes, number of filters.etc are chosen ... 
+We implement a CAE with 10 nodes in the $z$ layer (the bottleneck). The number of convolutional layers, filter sizes, number of filters are chosen ... 
 
-```{r, eval = F}
+```{r}
 # Based o: https://blog.keras.io/building-autoencoders-in-keras.html
 #### Convolutional Encoder
-model_enc <- keras_model_sequential()
-model_enc %>%
-layer_conv_2d(filters = 16, kernel_size = c(3,3),
-activation = "relu", padding = "same",
-input_shape = input_dim) %>%
-layer_max_pooling_2d(pool_size = c(2,2), padding = "same")
-layer_conv_2d(filters = 8, kernel_size = c(3,3),
-activation = "relu", padding = "same") %>%
-layer_max_pooling_2d(pool_size = c(2,2), padding = "same")
-layer_conv_2d(filters = 8, kernel_size = c(3,3),
-activation = "relu", padding = "same") %>%
-layer_max_pooling_2d(pool_size = c(2,2), padding = "same")
+model_enc <- keras_model_sequential() %>%
+  layer_conv_2d(filters = 32, kernel_size = c(3,3),
+  activation = "relu", padding = "same",
+  input_shape = image_size) %>%
+  layer_max_pooling_2d(pool_size = c(2,2), padding = "same") %>% 
+  layer_conv_2d(filters = 16, kernel_size = c(3,3),
+  activation = "relu", padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(3,3), padding = "same") %>% 
+  layer_conv_2d(filters = 8, kernel_size = c(3,3),
+  activation = "relu", padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(4,4), strides = c(2,2), 
+                       padding = "valid")
 summary(model_enc)
 
 #### Convolutional Decoder
-model_dec <- keras_model_sequential()
-model_dec %>%
-layer_conv_2d(filters = 8, kernel_size = c(3,3),
-activation = "relu", padding = "same",
-input_shape = c(4, 4, 8)) %>%
-layer_upsampling_2d(size = c(2,2)) %>%
-layer_conv_2d(filters = 8, kernel_size = c(3,3),
-activation = "relu", padding = "same")
-layer_upsampling_2d(size = c(2,2)) %>%
-# Important: no padding
-layer_conv_2d(filters = 1, kernel_size = c(3,3),
-activation = "relu") %>%
-layer_upsampling_2d(size = c(2,2))
+model_dec <- keras_model_sequential() %>%
+  layer_conv_2d(filters = 8, kernel_size = c(3,3),
+  activation = "relu", padding = "valid",
+  input_shape = c(10, 10, 8)) %>%
+  layer_upsampling_2d(size = c(3,3)) %>%
+  layer_conv_2d(filters = 16, kernel_size = c(3,3),
+  activation = "relu", padding = "valid") %>% 
+  layer_upsampling_2d(size = c(3,3)) %>%
+  # Important: no padding
+  layer_conv_2d(filters = 1, kernel_size = c(3,3),
+  activation = "relu") %>%
+  layer_upsampling_2d(size = c(2,2))
 summary(model_dec)
 
 model.CAE <- keras_model_sequential() 
@@ -376,43 +404,67 @@ summary(model.CAE)
 
 We compile and fit the model. 
 
-```{r, eval = F}
-model %>% compile(
+```{r}
+model.CAE %>% compile(
   loss = "mean_squared_error",
   #optimizer = optimizer_rmsprop(),
   optimizer = "adam",
   metrics = c("mean_squared_error")
 )
 
-history <- model %>% fit(
-  x= x_train_cifra, y = x_train_cifra,
-  # Autoencoder
-  epochs = 5, batch_size = 128,
-  suffle = TRUE,
-  validation_split = 0.2
+callback.parameters.CAE <- callback_early_stopping(
+  monitor = "mean_squared_error",
+  patience = 7, # This argument is used to interrupt training when
+  # mean squared error stops improving (decreasing) for more than two epochs. 
+  verbose = 1,
+  mode = "min"
 )
+
+history.CAE <- model.CAE %>% fit( 
+  x = train.image_array_gen,
+  y = train.image_array_gen,
+  
+  # epochs
+  steps_per_epoch = as.integer(train_samples / batch_size), 
+  epochs = epochs, 
+  
+  # validation data
+  validation_data = val.image_array_gen,
+  validation_steps = as.integer(valid_samples / batch_size),
+  
+  # Add callbacks for early stopping. 
+  callbacks = callback.parameters.CAE
+)
+plot(history.CAE)
 ```
 
-We do predictions. 
+We do some predictions. 
 
-```{r, eval = F}
+```{r}
 # Autoencoder
-output_cifra <- predict(model,x_test_cifra)
-dim(output_cifra)
+output_cae <- model.CAE %>% predict(test.image_array_gen, steps = test_samples)
+#output_cae <- as.array(output_cae)
+dim(output_cae)
+
+# Plot the first predicted image as an example. 
+plot(as.raster(output_cae[1,,,]))
+
+# Plot the real image. 
+plot(as.raster(generator_next(test.image_array_gen)[[1]][1,,,]))
+# SVÆRT DÅRLIG MODELL LOL!
 
 # From input to encoder
-enc_output_cifra<-predict(model_enc,x_test_cifra)
-dim(enc_output_cifra)
+enc_output <- model_enc %>% predict(test.image_array_gen, steps = test_samples)
+dim(enc_output)
 
 # From encoder to decoder
-dec_output_cifra<-predict(model_dec,enc_output_cifra)
-dim(dec_output_cifra)
+dec_output_cifra <- model_dec %>% predict(enc_output)
+dim(dec_output_cifra)¨
 ```
-
 
 # Graphical Representation of Results
 
-We represent graphically the results from the test images to show the association between the activations in the $z$ layer and the class images. DO I USE GRADCAM HERE??
+We represent graphically the results from the test images to show the association between the activations in the $z$ layer and the class images. DO I USE GRADCAM HERE?? ELLER MENER HAN BARE Å PLOTTE ENCODER RESULTS FOR Å SE HVORDAN BILDENE SER UT ETTER ENCODEREN?
 
 Ta en titt i cifar10_2classes "Visualizing what convnets learn". 
  
