@@ -1,5 +1,5 @@
 ---
-title: "Task2"
+title: "Task 2"
 subtitle: "Statistical Learning with Deep Artificial Neural Networks"
 author: "Alexander J Ohrt"
 date: "`r format(Sys.time(), '%d. %b. %Y')`"
@@ -13,6 +13,7 @@ output:
     latex_engine: xelatex
 params: 
   seed: 1234
+  DA.valid: TRUE
 ---
 
 ```{r setup, include=FALSE}
@@ -33,13 +34,13 @@ set.seed(params$seed)
 
 The objective of this task is diagnosis of chest X-ray images. More specifically, we want to be able to separate between normal X-ray images and X-ray images with effusion. 
 
-We are given two data sets of images; 500 normal X-ray images and 500 X-ray images with effusion. This data will be used to construct models for diagnosis of future images. 
+We are given two data sets of images; 500 normal X-ray images and 500 X-ray images with effusion. The images are selected from the public [NIH ChestXray14](https://www.nih.gov/news-events/news-releases/nih-clinical-center-provides-one-largest-publicly-available-chest-x-ray-datasets-scientific-community) data set. This data will be used to construct models for diagnosis of future (unseen) images. 
 
 # Preprocessing
 
-First we separate the data into two sets; a training set containing $\frac23$ of the data and a test set containing the remaining $\frac13$. In order to do this, we assume that both sets of images are saved in a directory called "images". This directory contains the 500 normal X-ray images in a sub directory called "normal", and the 500 X-ray images with diffusion in a sub directory called "effusion". The images are given in png format. 
+First we separate the data into two sets; a training set containing $\frac23$ of the data and a test set containing the remaining $\frac13$. In order to do this, we assume that both sets of images are saved in a directory called "images". This directory contains the 500 normal X-ray images in a sub directory called "normal", and the 500 X-ray images with effusion in a sub directory called "effusion". The images are given in png format. After this split, we split the training data into a "pure" training set and a validation data set, where the former takes $\frac45$ of the values and the latter takes $\frac15$ of the values (thus, in total data set terms, the former takes $\frac{8}{15}$ and the latter takes $\frac{2}{15}$ of the complete data set. The remaining $\frac13$ is still left to the test set). 
 
-We create two new sub directories using within the "images" directory; one called "test", which contains the randomly sampled test data, and one called "train", which contains the randomly sampled training data. We assume that these directories have not been created on the computer earlier. 
+We create three (or two, without the validation directory, depending on the parameter `DA.valid`) new sub directories within the "images" directory; one called "test", which contains the randomly sampled test data, one called "train", which contains the randomly sampled training data and one called "valid", which contains the randomly sample validation data, which is sampled from the training data. The last directory is only created if `params$DA.valid` is set to `TRUE`. The reason behind this parameter will be explained later. We assume that these directories have not been created on the computer earlier (this is very important in order for the data to be divided correctly between the directories!). We could implement some sort of deletion of old directories if they already exist, but I have chosen to skip this for now. 
 
 ```{r}
 set.seed(params$seed) # Set seed to 1234, as chosen in params. 
@@ -51,11 +52,21 @@ effusion.path <- paste0(image.path, "/effusion")
 train.path <- paste0(image.path, "/train") # New path for training images. 
 test.path <- paste0(image.path, "/test") # New path for test images. 
 
+if(!params$DA.valid){
+  valid.path <- paste0(image.path, "/valid") # New path for validation images. 
+}
+
 # Sub directories of the above paths, for training and test images, split up into "normal" and "effusion":
 train.normal.path <- paste0(train.path, "/normal") # New path for normal train images . 
 train.effusion.path <- paste0(train.path, "/effusion") # New path for effusion train images.
 test.normal.path <- paste0(test.path, "/normal") # New path for normal test images.  
 test.effusion.path <- paste0(test.path, "/effusion") # New path for effusion test images. 
+
+if(!params$DA.valid){
+  valid.normal.path <- paste0(valid.path, "/normal") # New path for normal validation images. 
+  valid.effusion.path <- paste0(valid.path, "/effusion") # New path for effusion validation images.  
+}
+
 
 # We collect the names of all the images.
 normal.image.names <- list.files(normal.path)
@@ -65,6 +76,10 @@ effusion.image.names <- list.files(effusion.path)
 dir.create(train.path)
 dir.create(test.path)
 
+if(!params$DA.valid){
+  dir.create(valid.path)
+}
+
 # We also create "effusion" and "normal" sub directories inside the new "train" and "test" directories. 
 # This is needed to get images for models later. 
 dir.create(train.normal.path)
@@ -72,9 +87,14 @@ dir.create(test.normal.path)
 dir.create(train.effusion.path)
 dir.create(test.effusion.path)
 
+if(!params$DA.valid){
+  dir.create(valid.normal.path)
+  dir.create(valid.effusion.path)
+}
+
 # We fill the newly created sub folders with randomly sampled data. 
 # We know that the images are named (for example) "normal0.png" and "effusion0.png", 
-# with numbers ranging from 0 to 499. We check that this is the case below. 
+# with numbers ranging from 0 to 499. We confirm that this is the case below. 
 all(sort(parse_number(normal.image.names)) == 0:499)
 all(sort(parse_number(effusion.image.names)) == 0:499)
 
@@ -82,6 +102,13 @@ all(sort(parse_number(effusion.image.names)) == 0:499)
 train.numbers <- sample(0:499, size = 2/3*500)
 # Find testing numbers as well, simply using a set difference. 
 test.numbers <- setdiff(0:499, train.numbers)
+
+if(!params$DA.valid){
+  validation.numbers <- sample(train.numbers, size = 1/5*(2/3*500))
+  train.numbers <- setdiff(train.numbers, validation.numbers)
+  test.numbers <- setdiff(0:499, train.numbers)
+  test.numbers <- setdiff(test.numbers, validation.numbers)
+}
 
 # Next we select the image names corresponding to the indices sampled above. 
 normal.image.names <- data.frame(normal.image.names)
@@ -96,16 +123,27 @@ test.normal <- normal.image.names %>% dplyr::filter(parse_number(normal.image.na
 test.normal <- test.normal$normal.image.names # Change data type of names to vector. 
 all(sort(parse_number(test.normal)) == sort(test.numbers)) # Check that we have selected the correct names.
 
+if(!params$DA.valid){
+  validation.normal <- normal.image.names %>% dplyr::filter(parse_number(normal.image.names) %in% validation.numbers)
+  validation.normal <- validation.normal$normal.image.names # Change data type of names to vector. 
+  print(all(sort(parse_number(validation.normal)) == sort(validation.numbers))) # Check that we have selected the correct names.
+}
+
 # We sample from 0:499, in order to choose training numbers. We do it again for the effusion images, 
-# in case the indices of the two types of images are not chosen randomly (we do not know how the images are named by the source).
+# in case the indices of the two types of images are not chosen randomly, 
+# and they present some sort of dependence (we do not know how the images are named by the source).
 train.numbers <- sample(0:499, size = 2/3*500)
 # Find testing numbers as well, simply using a set difference. 
 test.numbers <- setdiff(0:499, train.numbers)
 
-# Next we select the image names corresponding to the indices sampled above. 
-normal.image.names <- data.frame(normal.image.names)
-effusion.image.names <- data.frame(effusion.image.names)
+if(!params$DA.valid){
+  validation.numbers <- sample(train.numbers, size = 1/5*(2/3*500))
+  train.numbers <- setdiff(train.numbers, validation.numbers)
+  test.numbers <- setdiff(0:499, train.numbers)
+  test.numbers <- setdiff(test.numbers, validation.numbers)
+}
 
+# Next we select the image names corresponding to the indices sampled above. 
 train.effusion <- effusion.image.names %>% dplyr::filter(parse_number(effusion.image.names) %in% train.numbers)
 train.effusion <- train.effusion$effusion.image.names # Change data type of names to vector. 
 all(sort(parse_number(train.effusion)) == sort(train.numbers)) # Check that we have selected the correct names.
@@ -114,23 +152,28 @@ test.effusion <- effusion.image.names %>% dplyr::filter(parse_number(effusion.im
 test.effusion <- test.effusion$effusion.image.names # Change data type of names to vector. 
 all(sort(parse_number(test.effusion)) == sort(test.numbers)) # Check that we have selected the correct names.
 
+if(!params$DA.valid){
+  validation.effusion <- effusion.image.names %>% dplyr::filter(parse_number(effusion.image.names) %in% validation.numbers)
+  validation.effusion <- validation.effusion$effusion.image.names # Change data type of names to vector. 
+  print(all(sort(parse_number(validation.effusion)) == sort(validation.numbers))) # Check that we have selected the correct names.
+}
 
 # Now that we have all the file names, we copy them into their respective directories. 
-#apply(train.normal, FUN = file.copy, from = paste0(image.path,"/normal"), to = paste0(image.path, "/train"))
 for (i in 1:length(train.numbers)){
-  name <- train.normal[i]
-  file.copy(from = paste0(normal.path, "/", name), to = train.normal.path)
-  
-  name <- train.effusion[i]
-  file.copy(from = paste0(effusion.path, "/", name), to = train.effusion.path)
+  file.copy(from = paste0(normal.path, "/", train.normal[i]), to = train.normal.path, overwrite = T)
+  file.copy(from = paste0(effusion.path, "/", train.effusion[i]), to = train.effusion.path, overwrite = T)
 }
 
 for (i in 1:length(test.numbers)){
-  name <- test.normal[i] 
-  file.copy(from = paste0(normal.path, "/", name), to = test.normal.path)
-  
-  name <- test.effusion[i]
-  file.copy(from = paste0(effusion.path, "/", name), to = test.effusion.path)
+  file.copy(from = paste0(normal.path, "/", test.normal[i] ), to = test.normal.path, overwrite = T)
+  file.copy(from = paste0(effusion.path, "/", test.effusion[i]), to = test.effusion.path, overwrite = T)
+}
+
+if(!params$DA.valid){
+  for (i in 1:length(validation.numbers)){
+    file.copy(from = paste0(normal.path, "/", validation.normal[i]), to = valid.normal.path, overwrite = T)
+    file.copy(from = paste0(effusion.path, "/", validation.effusion[i]), to = valid.effusion.path, overwrite = T)
+  }
 }
 
 # Check that it worked!
@@ -146,11 +189,21 @@ all(test.normal.new == test.normal)
 test.effusion.new <- list.files(test.effusion.path)
 length(test.effusion.new)
 all(test.effusion.new == test.effusion)
+if(!params$DA.valid){
+  valid.normal.new <- list.files(valid.normal.path)
+  print(length(valid.normal.new))
+  print(all(valid.normal.new == validation.normal))
+  valid.effusion.new <- list.files(valid.effusion.path)
+  print(length(valid.effusion.new))
+  print(all(valid.effusion.new == validation.effusion))
+}
 ```
 
 # Image Data Generators 
 
-We make image data generators in order to work with models. These are image processing helper tools from Keras, which are used to turn image files on disk into batches of pre-processed tensors. The function `image_data_generator` can be used to generate batches with real-time data augmentation. Thus, this function can be used to pre-process the images. We rescale the images in $[0,1]$ using this function. The function `flow_images_from_directory` takes, among others, a directory and an image generator as input, and generates batches of images from the specified directory, following the pre-processing rules given in the generator. We also choose the target size of the images, i.e. the width and height, where the original images are $512 \times 512$. We also choose a validation split of $\frac15$, which means that one fifth of the training data will be used for model validation under fitting. 
+Simply loading all 1000 images into the memory is (in most cases) not feasible. We make image data generators in order to work with models. These are image processing helper tools from Keras, which are used to turn image files on disk into batches of pre-processed tensors. The function `image_data_generator` can be used to generate batches with real-time data augmentation. Thus, this function can be used to pre-process the images. We rescale the images in $[0,1]$ using this function. Moreover, we apply some image augmentation, like shifting, zooming and change of brightness. This is done to avoid overfitting during model training, i.e. to improve the generalization abilities of the models. The function `flow_images_from_directory` takes, among other arguments, a directory and an image generator as input, and generates batches of images from the specified directory, following the pre-processing rules given in the generator. We also choose the target size of the images, i.e. the width and height, where the original images are $512 \times 512$. As mentioned earlier, we also choose a validation split of $\frac15$, which means that one fifth of the training data will be used for model validation during fitting. 
+
+Notice that we have tried training the model both with and without data augmentation on the validation data, following the discussion (e.g.) in [this thread](https://stackoverflow.com/questions/48029542/data-augmentation-in-test-validation-set). I wanted to test both variants, since it is not completey clear which is most coherent and I think both could make sense, depending on the philosophy one follows. It is not clear to me which is the best, as they seem to give similar results according to the performance assessment. Therefore, I have chosen to set the parameter `params$DA.valid` to `TRUE` during my discussion in this report, even though both options are aptly implemented and tested simply by changing the value of the parameter. When wanting to add image augmentation to the validation data, we set the parameter `DA.valid` to `TRUE`, which then does not make the directory for validation data in the preprocessing above. The generators below are therefore defined in slightly different ways depending on the value of the parameter, where I have tried to explain the methodologies as clearly as possible in the code below. 
 
 ```{r}
 img_width <- 128 # or 256, 128, 64 or 32 (try different sizes)!
@@ -164,45 +217,82 @@ image_size <- c(target_size, channels)
 # optional data augmentation.
 train_data_gen <- image_data_generator(
   rescale = 1/255,
-  validation_split = 1/5
-  # ,rotation_range = 40,
-  # width_shift_range = 0.2,
-  # height_shift_range = 0.2,
-  # shear_range = 0.2,
-  # zoom_range = 0.2,
-  # horizontal_flip = TRUE,
-  # fill_mode = "nearest"
+  validation_split = 1/5,
+  # ,rotation_range = 40, # Not relevant for us. 
+  # Images will almost always be relatively straight. 
+  width_shift_range = 0.2, # Shift in x direction. 
+  height_shift_range = 0.2, # Shift in y direction. 
+  # shear_range = 0.2, # I do not want to use shearing either, 
+  # as it seems a bit irrelevant for our type of images. 
+  zoom_range = 0.2,
+  # horizontal_flip = TRUE, # Deemed irrelevant. 
+  fill_mode = "constant", # Added constant fill-mode (cval = 0), 
+  # since the rest of the fill-modes seem to distort the images 
+  # in a very unnatural way. Therefore I think it is better to 
+  # simply set the points outside the boundaries of the input to 0. 
+  brightness_range = c(0.5, 1.5) # Play with the brightness. 
 )
 
+# We do not apply the data-augmentation (except from rescaling)
+# testing data set, since it is important 
+# to validate on the true images we have been given. 
 test_data_gen <- image_data_generator(
   rescale = 1/255
 )
 
 # Then we load the data using the generators. 
-# training images.
-train.image_array_gen <- flow_images_from_directory(train.path, 
+
+
+if(!params$DA.valid){
+  # DO NOT USE data augmentation on the validation data. 
+  # training images.
+  train.image_array_gen <- flow_images_from_directory(train.path, 
                                                     train_data_gen,
                                                     class_mode = "binary",
-                                                    seed = 1234, # Change to params$seed in Rmd.
+                                                    seed = params$seed, 
                                                     target_size = target_size,
                                                     batch_size = batch_size,
                                                     #color_mode = "grayscale",
-                                                    subset = "training")
-
-# validation images. 
-val.image_array_gen <- flow_images_from_directory(train.path, 
+                                                    )
+  
+  # If we choose to NOT use data augmentation on the validation data.
+  val.image_array_gen <- flow_images_from_directory(valid.path, 
+                                                   test_data_gen,
+                                                   class_mode = "binary",
+                                                   seed = params$seed, 
+                                                   target_size = target_size,
+                                                   batch_size = batch_size
+                                                   #color_mode = "grayscale"
+                                                    )
+} else {
+  # USE data augmentation on the validation data. 
+  train.image_array_gen <- flow_images_from_directory(train.path, 
+                                                    train_data_gen,
+                                                    class_mode = "binary",
+                                                    seed = params$seed, 
+                                                    target_size = target_size,
+                                                    batch_size = batch_size,
+                                                    #color_mode = "grayscale",
+                                                    subset = "training"
+                                                    )
+  
+  # If we choose to use data augmentation on the validation data, 
+  # then we use the same image data generator as for the training data. 
+  val.image_array_gen <- flow_images_from_directory(train.path, 
                                                    train_data_gen,
                                                    class_mode = "binary",
-                                                   seed = params$seed, # Change to params$seed in Rmd.
+                                                   seed = params$seed, 
                                                    target_size = target_size,
                                                    batch_size = batch_size,
                                                    #color_mode = "grayscale",
                                                    subset = "validation")
+  
+}
 
 test.image_array_gen <- flow_images_from_directory(test.path, 
                                                     test_data_gen,
                                                     class_mode = "binary",
-                                                    seed = params$seed, # Change to params$seed in Rmd.
+                                                    seed = params$seed,
                                                     target_size = target_size,
                                                     batch_size = 1,
                                                     #color_mode = "grayscale", 
@@ -211,11 +301,11 @@ test.image_array_gen <- flow_images_from_directory(test.path,
                                                     )
 
 # number of training samples
-train_samples <- train.image_array_gen$n
+(train_samples <- train.image_array_gen$n)
 # number of validation samples
-valid_samples <- val.image_array_gen$n
+(valid_samples <- val.image_array_gen$n)
 # number of testing samples
-test_samples <- test.image_array_gen$n
+(test_samples <- test.image_array_gen$n)
 
 # Class index decoding. 
 d1 <- cbind(c("effusion", "normal"), 
@@ -226,7 +316,7 @@ knitr::kable(d1, caption = "Encoding")
 
 The generators yield the batches indefinitely, which means that they act like infinite loops over the images in the specified directories. 
 
-We have a short look at some of the images from the training data set, to get a feel for what the pictures may look like. Notice that the normal class of images is decoded as 1 and the effusion class of images is decoded as 0. This choice is insignificant for us and is chosen by the image generators. 
+We have a short look at some of the images from the training data set, to get a feel for what the pictures may look like. Notice that the normal class of images is coded as 1 and the effusion class of images is coded as 0. This choice is insignificant for us and is chosen by the image generators. 
 
 ```{r}
 # Element generate.
@@ -239,11 +329,33 @@ for (i in seq(5, 11, 2)) {
 }
 ```
 
+Some of the validation images are shown as well, which may be augmented, depending on the choice of the parameter `DA.valid`.
+
+```{r}
+# Element generate.
+batch <- generator_next(val.image_array_gen)
+str(batch)
+
+op <- par(mfrow = c(2, 2), pty = "s", mar = c(1, 0, 1, 0))
+for (i in seq(5, 11, 2)) {
+  plot(as.raster(batch[[1]][i,,,]), main = paste0("Label: ", batch[[2]][i]))
+}
+```
+
+Some of the testing images are shown as well, which have not been augmented. 
+
+```{r}
+op <- par(mfrow = c(2, 2), pty = "s", mar = c(1, 0, 1, 0))
+for (i in 1:4) {
+  batch <- generator_next(test.image_array_gen)
+  plot(as.raster(batch[[1]][1,,,]))
+}
+```
+
+
 # Convolutional Neural Network (CNN) Implementation
 
-We have implemented a CNN with three concolutional layers and one fully connected dense hidden layer. This fully connected layer has the same amount of nodes as the image height / width. In between we have added some max pooling layers, some layer dropout and a kernel L2 regularizer in the fully connected dense hidden layer, in order to combat overfitting. 
-
-TESTER ANDRE MODELLER I "importing_images.R".
+We have implemented a CNN with three convolutional layers and one fully connected dense hidden layer. This fully connected layer has the same amount of nodes as the image height / width. In between we have added some max pooling layers, some layer dropout and a kernel L2 regularizer in the fully connected dense hidden layer, in order to combat overfitting. 
 
 ```{r}
 model <- keras_model_sequential() %>%
@@ -302,7 +414,7 @@ plot(history)
 
 We tune the hyperparameter `batch_size` using the `tfruns` package. This is done exploring the grid `r c(16, 32, 64)` for the values of the hyperparameter. 
 
-This is done in separate files, which are delivered with this report and Rmd. For each of the values in the grid we want to explore, we load the saved model and fit it with the data generators defined using the respective batch size we want to test for. We need to redefine the data generators for each of the three models, because they decide the batch sizes. 
+This is done in separate files, which are delivered with this report and Rmd. For each of the values in the grid we want to explore, we load the saved model and fit it with the data generators defined using the respective batch size we want to test for. We need to redefine the data generators for each of the three models, because they decide the batch sizes. Notice that this is only implemented for the variant of the solution where data augmentation is performed on both training data and validation data, i.e. when the parameter `params$DA.valid` is set to `TRUE`.
 
 The results from running the file `task2_tfruns.R`, which calls on `task2_explore.R` for each different batch size on the grid, seem to show that a batch size of 64 yields the best results, according to the metric validation accuracy. 
 
@@ -335,7 +447,9 @@ history <- model %>% fit(
 plot(history)
 ```
 
-# Performance Assessment
+We notice that it seems like a patience of 2 seems to be a bit strict for this model, since it stops training relatively early. 
+
+# Performance Assessment of CNN
 
 We assess the performance of the CNN by predicting the categories of the test images. The confusion matrix is given.
 
@@ -402,7 +516,7 @@ model.CAE %>% model_enc %>% model_dec
 summary(model.CAE)
 ```
 
-We compile and fit the model. 
+We compile and fit the model. Notice that when fitting this model, we have tried both with and without image augmentation on the validation data as well USIKKER PÅ OM DETTE GIR MENING HER?!
 
 ```{r}
 model.CAE %>% compile(
@@ -440,6 +554,7 @@ plot(history.CAE)
 
 We do some predictions. 
 
+RMD KOMPILATOREN FAILA HER!?!? FINN UT HVA FEILEN ER?
 ```{r}
 # Autoencoder
 output_cae <- model.CAE %>% predict(test.image_array_gen, steps = test_samples)
@@ -462,9 +577,14 @@ dec_output_cifra <- model_dec %>% predict(enc_output)
 dim(dec_output_cifra)¨
 ```
 
-# Graphical Representation of Results
+# Graphical Representation of Results from CAE
 
 We represent graphically the results from the test images to show the association between the activations in the $z$ layer and the class images. DO I USE GRADCAM HERE?? ELLER MENER HAN BARE Å PLOTTE ENCODER RESULTS FOR Å SE HVORDAN BILDENE SER UT ETTER ENCODEREN?
 
 Ta en titt i cifar10_2classes "Visualizing what convnets learn". 
  
+# Further Work
+
+As we have seen, neither of the models employed do a very good job in separating between normal X-ray images and the images with effusion. Because of shortage of time close to the end of the spring semester, it was not possible to keep improving these models. I have already tried to combat overfitting problems (especially in the CNN) by using data augmentation in the image generators, adding dropout and L2 kernel regularization. This is something I would have liked to do to a greater extent before delivering this report, but perhaps it can be done after.
+
+HOWEVER, NOTICE ALSO THAT WE DO NOT HAVE A LOT OF DATA (1000 IMAGES). FÅ MED DETTE I DISKUSJONEN OVER OGSÅ, SOM MULIG ÅRSAK TIL AT MODELLENE IKKE ER SÅ VELDIG GODE. 

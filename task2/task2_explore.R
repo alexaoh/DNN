@@ -6,8 +6,8 @@ library(readr)
 library(pROC)
 library(caret)
 
-
-set.seed(1234)
+glob.seed <- 1234
+set.seed(glob.seed)
 ############## Hyperparameter Flags
 FLAGS <- flags(
   flag_integer("batch_size", 16) # Set default to batch size 16. 
@@ -47,17 +47,19 @@ test_data_gen <- image_data_generator(
 train.image_array_gen <- flow_images_from_directory(train.path, 
                                                     train_data_gen,
                                                     class_mode = "binary",
-                                                    seed = 1234, # Change to params$seed in Rmd.
+                                                    seed = glob.seed, # Change to params$seed in Rmd.
                                                     target_size = target_size,
                                                     batch_size = batch_size,
                                                     #color_mode = "grayscale",
                                                     subset = "training")
 
+# MÅ LIME INN DISSE PÅ NYTT, TILSVARENDE VARIANTEN NÅR IMAGE AUGMENTATION SKAL BRUKES FOR VALIDATION DATA OGSÅ!
+
 # validation images. 
 val.image_array_gen <- flow_images_from_directory(train.path, 
                                                   train_data_gen,
                                                   class_mode = "binary",
-                                                  seed = params$seed, # Change to params$seed in Rmd.
+                                                  seed = glob.seed, # Change to params$seed in Rmd.
                                                   target_size = target_size,
                                                   batch_size = batch_size,
                                                   #color_mode = "grayscale",
@@ -66,7 +68,7 @@ val.image_array_gen <- flow_images_from_directory(train.path,
 test.image_array_gen <- flow_images_from_directory(test.path, 
                                                    test_data_gen,
                                                    class_mode = "binary",
-                                                   seed = params$seed, # Change to params$seed in Rmd.
+                                                   seed = glob.seed, # Change to params$seed in Rmd.
                                                    target_size = target_size,
                                                    batch_size = 1,
                                                    #color_mode = "grayscale"
