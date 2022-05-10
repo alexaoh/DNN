@@ -28,16 +28,25 @@ image_size <- c(target_size, channels)
 # optional data augmentation.
 train_data_gen <- image_data_generator(
   rescale = 1/255,
-  validation_split = 1/5
-  # ,rotation_range = 40,
-  # width_shift_range = 0.2,
-  # height_shift_range = 0.2,
-  # shear_range = 0.2,
-  # zoom_range = 0.2,
-  # horizontal_flip = TRUE,
-  # fill_mode = "nearest"
+  validation_split = 1/5,
+  # ,rotation_range = 40, # Not relevant for us. 
+  # Images will almost always be relatively straight. 
+  width_shift_range = 0.2, # Shift in x direction. 
+  height_shift_range = 0.2, # Shift in y direction. 
+  # shear_range = 0.2, # I do not want to use shearing either, 
+  # as it seems a bit irrelevant for our type of images. 
+  zoom_range = 0.2,
+  # horizontal_flip = TRUE, # Deemed irrelevant. 
+  fill_mode = "constant", # Added constant fill-mode (cval = 0), 
+  # since the rest of the fill-modes seem to distort the images 
+  # in a very unnatural way. Therefore I think it is better to 
+  # simply set the points outside the boundaries of the input to 0. 
+  brightness_range = c(0.5, 1.5) # Play with the brightness. 
 )
 
+# We do not apply the data-augmentation (except from rescaling)
+# to the testing data set, since it is important 
+# to validate on the true images we have been given. 
 test_data_gen <- image_data_generator(
   rescale = 1/255
 )
@@ -52,8 +61,6 @@ train.image_array_gen <- flow_images_from_directory(train.path,
                                                     batch_size = batch_size,
                                                     #color_mode = "grayscale",
                                                     subset = "training")
-
-# MÅ LIME INN DISSE PÅ NYTT, TILSVARENDE VARIANTEN NÅR IMAGE AUGMENTATION SKAL BRUKES FOR VALIDATION DATA OGSÅ!
 
 # validation images. 
 val.image_array_gen <- flow_images_from_directory(train.path, 
