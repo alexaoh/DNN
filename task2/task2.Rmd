@@ -42,7 +42,7 @@ First we separate the data into two sets; a training set containing $\frac23$ of
 
 We create three (or two, without the validation directory, depending on the parameter `DA.valid`) new sub directories within the "images" directory; one called "test", which contains the randomly sampled test data, one called "train", which contains the randomly sampled training data and one called "valid", which contains the randomly sample validation data, which is sampled from the training data. The last directory is only created if `params$DA.valid` is set to `TRUE`. The reason behind this parameter will be explained later. We assume that these directories have not been created on the computer earlier (this is very important in order for the data to be divided correctly between the directories!). We could implement some sort of deletion of old directories if they already exist, but I have chosen to skip this for now. 
 
-```{r}
+```{r makeDIRs}
 set.seed(params$seed) # Set seed to 1234, as chosen in params. 
 image.path <- "./images"
 normal.path <- paste0(image.path, "/normal")
@@ -205,13 +205,13 @@ Simply loading all 1000 images into the memory is (in most cases) not feasible. 
 
 Notice that we have tried training the model both with and without data augmentation on the validation data, following the discussion (e.g.) in [this thread](https://stackoverflow.com/questions/48029542/data-augmentation-in-test-validation-set). I wanted to test both variants, since it is not completey clear which is most coherent and I think both could make sense, depending on the philosophy one follows. It is not clear to me which is the best, as they seem to give similar results according to the performance assessment. Therefore, I have chosen to set the parameter `params$DA.valid` to `TRUE` during my discussion in this report, even though both options are aptly implemented and tested simply by changing the value of the parameter. When wanting to add image augmentation to the validation data, we set the parameter `DA.valid` to `TRUE`, which then does not make the directory for validation data in the preprocessing above. The generators below are therefore defined in slightly different ways depending on the value of the parameter, where I have tried to explain the methodologies as clearly as possible in the code below. 
 
-```{r}
-img_width <- 128 # or 256, 128, 64 or 32 (try different sizes)!
-img_height <- 128
+```{r splitDATA}
+img_width <- img_height <- 128 # or 256, 128, 64 or 32. 
+# 128 seems to give alright performance, without taking too long to train.
 target_size <- c(img_width, img_height)
-batch_size <- 32
+batch_size <- 32 # Set the batch_size to the tuned hyperparameter following tfruns!
 epochs <- 30
-channels <- 3 # RGB = 3 channels
+channels <- 1 # RGB = 3 channels
 image_size <- c(target_size, channels)
 
 # optional data augmentation.
@@ -220,8 +220,8 @@ train_data_gen <- image_data_generator(
   validation_split = 1/5,
   # ,rotation_range = 40, # Not relevant for us. 
   # Images will almost always be relatively straight. 
-  width_shift_range = 0.2, # Shift in x direction. 
-  height_shift_range = 0.2, # Shift in y direction. 
+  width_shift_range = 0.1, # Shift in x direction. 
+  height_shift_range = 0.1, # Shift in y direction. 
   # shear_range = 0.2, # I do not want to use shearing either, 
   # as it seems a bit irrelevant for our type of images. 
   zoom_range = 0.2,
@@ -230,7 +230,7 @@ train_data_gen <- image_data_generator(
   # since the rest of the fill-modes seem to distort the images 
   # in a very unnatural way. Therefore I think it is better to 
   # simply set the points outside the boundaries of the input to 0. 
-  brightness_range = c(0.5, 1.5) # Play with the brightness. 
+  brightness_range = c(0.7, 1.3) # Play with the brightness. 
 )
 
 # We do not apply the data-augmentation (except from rescaling)
@@ -252,7 +252,7 @@ if(!params$DA.valid){
                                                     seed = params$seed, 
                                                     target_size = target_size,
                                                     batch_size = batch_size,
-                                                    #color_mode = "grayscale",
+                                                    color_mode = "grayscale"
                                                     )
   
   # If we choose to NOT use data augmentation on the validation data.
@@ -261,8 +261,8 @@ if(!params$DA.valid){
                                                    class_mode = "binary",
                                                    seed = params$seed, 
                                                    target_size = target_size,
-                                                   batch_size = batch_size
-                                                   #color_mode = "grayscale"
+                                                   batch_size = batch_size,
+                                                   color_mode = "grayscale"
                                                     )
 } else {
   # USE data augmentation on the validation data. 
@@ -272,7 +272,7 @@ if(!params$DA.valid){
                                                     seed = params$seed, 
                                                     target_size = target_size,
                                                     batch_size = batch_size,
-                                                    #color_mode = "grayscale",
+                                                    color_mode = "grayscale",
                                                     subset = "training"
                                                     )
   
@@ -284,7 +284,7 @@ if(!params$DA.valid){
                                                    seed = params$seed, 
                                                    target_size = target_size,
                                                    batch_size = batch_size,
-                                                   #color_mode = "grayscale",
+                                                   color_mode = "grayscale",
                                                    subset = "validation")
   
 }
@@ -295,7 +295,7 @@ test.image_array_gen <- flow_images_from_directory(test.path,
                                                     seed = params$seed,
                                                     target_size = target_size,
                                                     batch_size = 1,
-                                                    #color_mode = "grayscale", 
+                                                    color_mode = "grayscale", 
                                                     shuffle = F # Makes it easier to check with 
                                                     # true class labels after predicting. 
                                                     )
@@ -326,9 +326,9 @@ str(batch)
 op <- par(mfrow = c(2, 2), pty = "s", mar = c(1, 0, 1, 0))
 for (i in seq(5, 11, 2)) {
   #plot(as.raster(batch[[1]][i,,,]), main = paste0("Label: ", batch[[2]][i]))
-  im <- matrix(batch[[1]][i,,,], nrow = 128, ncol = 128)
+  im <- matrix(batch[[1]][i,,,], nrow = img_height, ncol = img_height)
   rotate <- function(x) t(apply(x, 2, rev))
-  image(1:128, 1:128, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][i]))
+  image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][i]))
 }
 ```
 
@@ -341,9 +341,9 @@ str(batch)
 op <- par(mfrow = c(2, 2), pty = "s", mar = c(1, 0, 1, 0))
 for (i in seq(5, 11, 2)) {
   #plot(as.raster(batch[[1]][i,,,]), main = paste0("Label: ", batch[[2]][i]))
-  im <- matrix(batch[[1]][i,,,], nrow = 128, ncol = 128)
+  im <- matrix(batch[[1]][i,,,], nrow = img_height, ncol = img_height)
   rotate <- function(x) t(apply(x, 2, rev))
-  image(1:128, 1:128, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][i]))
+  image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][i]))
 }
 ```
 
@@ -354,9 +354,9 @@ op <- par(mfrow = c(2, 2), pty = "s", mar = c(1, 0, 1, 0))
 for (i in 1:4) {
   batch <- generator_next(test.image_array_gen)
   #plot(as.raster(batch[[1]][1,,,]))
-  im <- matrix(batch[[1]][1,,,], nrow = 128, ncol = 128)
+  im <- matrix(batch[[1]][1,,,], nrow = img_height, ncol = img_height)
   rotate <- function(x) t(apply(x, 2, rev))
-  image(1:128, 1:128, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][1]))
+  image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][1]))
 }
 ```
 
@@ -365,7 +365,7 @@ for (i in 1:4) {
 
 We have implemented a CNN with three convolutional layers and one fully connected dense hidden layer. This fully connected layer has the same amount of nodes as the image height / width. In between we have added some max pooling layers, some layer dropout and a kernel L2 regularizer in the fully connected dense hidden layer, in order to combat overfitting. 
 
-```{r}
+```{r defineCNN}
 model <- keras_model_sequential() %>%
   layer_conv_2d(filters = 32, kernel_size = c(3, 3), activation = "relu", 
                 padding="same",
@@ -392,7 +392,7 @@ We define the CNN with choice of optimizer, loss function and metric, before we 
 
 After defining the model conveniently, we fit the model. Because the image generators loop endlessly over the images on disk, we need to specify the total number of steps, or batches, before declaring on epoch as finished. Since we are using a generator for both the training data and the validation data, we need to specify this value for both the training data and the validation data. This is done with the arguments `steps_per_epoch` and `validation_steps` below. 
 
-```{r}
+```{r trainCNN}
 model %>% compile(
   loss = "binary_crossentropy",
   #optimizer = optimizer_adam(), # Adam is slow and gives worse performance it seems like. 
@@ -405,6 +405,13 @@ model %>% compile(
 # it can be used when tuning the hyperparameter. 
 model %>% save_model_hdf5("convnet.h5")
 
+cb <- callback_reduce_lr_on_plateau( # Reduce learning rate if val_loss plateaus. 
+    monitor="val_accuracy",
+    factor = 0.5,
+    patience = 2, 
+    min_lr = 10e-8, 
+    mode = "max")
+
 history <- model %>% fit(
   train.image_array_gen,
   # epochs
@@ -414,6 +421,8 @@ history <- model %>% fit(
   # validation data
   validation_data = val.image_array_gen,
   validation_steps = as.integer(valid_samples / batch_size),
+  
+  callbacks = cb
 )
 plot(history)
 ```
@@ -430,13 +439,14 @@ The results from running the file `task2_tfruns.R`, which calls on `task2_explor
 
 We implement early stopping in the model, using the `keras callbacks()` API. The training is interrupted when validation accuracy stops improving (increasing) for more than two epochs. 
 
-```{r}
+```{r callbackCNN}
 callback.parameters <- callback_early_stopping(
   monitor = "val_accuracy",
   patience = 2, # This argument is used to interrupt training when
   # validation accuracy stops improving (increasing) for more than two epochs. 
   verbose = 1,
-  mode = "max"
+  mode = "max", 
+  restore_best_weights = T
 )
 
 history <- model %>% fit( 
@@ -463,13 +473,13 @@ We assess the performance of the CNN by predicting the categories of the test im
 
 First we evaluate the model to get an idea of how well the model can predict on the test images. Notice that we, again, have to specify the total number of steps before declaring the evaluation round finished, which is done using the `steps` argument in the `evaluate` function. For the test data generator we have defined the batch size as 1, such that we simply evaluate every test image once during evaluation and prediction. 
 
-```{r}
+```{r evalCNN}
 model %>% evaluate(test.image_array_gen, steps = test_samples)
 ```
 
 Next we make predictions on every test image. 
 
-```{r}
+```{r predCNN}
 #test.image_array_gen$reset() # Done in case such that nothing will go wrong. 
 y_pred <- model %>% predict(test.image_array_gen, steps = test_samples) %>% 
     `>`(0.5) %>% k_cast("int32")
@@ -489,21 +499,21 @@ Notice that the encoder consists of three convolutional layers and three max poo
 
 LEGG TIL DROPOUT ELLER LIGNENDE FOR Å UNNGÅ OVERFITTING?! (I STEDET ELLER I TILLEGG TIL DATA AUGMENTATION).
 
-```{r}
+```{r defineCAE}
 # Taken inspiration from: 
 # https://blog.keras.io/building-autoencoders-in-keras.html
 # https://keras.io/examples/vision/autoencoder/
 
 # Convolutional Encoder.
 model_enc <- keras_model_sequential() %>%
-  layer_conv_2d(filters = 32, kernel_size = c(3,3),
+  layer_conv_2d(filters = 64, kernel_size = c(3,3),
   activation = "relu", padding = "same",
   input_shape = image_size) %>%
   layer_max_pooling_2d(pool_size = c(2,2), padding = "same") %>% 
-  layer_conv_2d(filters = 16, kernel_size = c(3,3),
+  layer_conv_2d(filters = 32, kernel_size = c(3,3),
   activation = "relu", padding = "same") %>%
   layer_max_pooling_2d(pool_size = c(3,3), padding = "same") %>% 
-  layer_conv_2d(filters = 8, kernel_size = c(3,3),
+  layer_conv_2d(filters = 16, kernel_size = c(3,3),
   activation = "relu", padding = "same") %>%
   layer_max_pooling_2d(pool_size = c(4,4), strides = c(2,2), 
                        padding = "valid")
@@ -511,12 +521,12 @@ summary(model_enc)
 
 # Convolutional Decoder.
 model_dec <- keras_model_sequential() %>% 
-  layer_conv_2d(filters = 8, kernel_size = c(3,3),
+  layer_conv_2d(filters = 16, kernel_size = c(3,3),
       activation = "relu", padding = "same",
-      input_shape = c(10, 10, 8)) %>% 
-  layer_conv_2d_transpose(filters = 8, kernel_size = c(4,4),
+      input_shape = c(10, 10, 16)) %>% 
+  layer_conv_2d_transpose(filters = 16, kernel_size = c(4,4),
       activation = "relu", padding = "valid", strides = c(2,2)) %>%
-  layer_conv_2d(filters = 16, activation = "relu", 
+  layer_conv_2d(filters = 32, activation = "relu", 
       kernel_size = c(3,3), padding = "same") %>% 
   layer_upsampling_2d(size = c(3,3)) %>%
   layer_conv_2d(filters = 1, kernel_size = c(3,3),
@@ -535,6 +545,8 @@ summary(model.CAE)
 We compile and fit the model. Notice that when fitting this model, we have tried both with and without image augmentation on the validation data as well USIKKER PÅ OM DETTE GIR MENING HER?! MULIG OM DATA AUGMENTATION GIR EN DÅRLIG MODELL, SIDEN DET ER EN AUTOENCODER!
 
 ```{r, eval = F}
+# Denne har eval = F!
+batch_size <- 32
 # TESTING WITH DATA WITHOUT AUGMENTATION. 
 # Try to generate data again, now without data augmentation. 
 # optional data augmentation.
@@ -556,7 +568,7 @@ train.image_array_gen <- flow_images_from_directory(train.path,
                                                   seed = params$seed, 
                                                   target_size = target_size,
                                                   batch_size = batch_size,
-                                                  #color_mode = "grayscale",
+                                                  color_mode = "grayscale",
                                                   subset = "training"
                                                   )
 
@@ -568,7 +580,7 @@ val.image_array_gen <- flow_images_from_directory(train.path,
                                                  seed = params$seed, 
                                                  target_size = target_size,
                                                  batch_size = batch_size,
-                                                 #color_mode = "grayscale",
+                                                 color_mode = "grayscale",
                                                  subset = "validation")
 
 
@@ -578,7 +590,7 @@ test.image_array_gen <- flow_images_from_directory(test.path,
                                                     seed = params$seed,
                                                     target_size = target_size,
                                                     batch_size = 1,
-                                                    #color_mode = "grayscale", 
+                                                    color_mode = "grayscale", 
                                                     shuffle = F # Makes it easier to check with 
                                                     # true class labels after predicting. 
                                                     )
@@ -592,20 +604,28 @@ test.image_array_gen <- flow_images_from_directory(test.path,
 ```
 
 
-```{r}
+```{r trainCAE}
 model.CAE %>% compile(
-  loss = "mean_squared_error",
+  loss = "mse",
   #optimizer = optimizer_rmsprop(),
-  optimizer = "adam",
-  metrics = c("mean_squared_error")
+  optimizer = optimizer_adam(learning_rate = 0.001, decay = 0.99)
+  #,metrics = c("mean_squared_error")
 )
 
-callback.parameters.CAE <- callback_early_stopping(
-  monitor = "mean_squared_error",
-  patience = 5, # This argument is used to interrupt training when
-  # mean squared error stops improving (decreasing) for more than two epochs. 
-  verbose = 1,
-  mode = "min"
+callback.parameters.CAE <- list(
+  callback_early_stopping(
+  monitor = "val_loss",
+    patience = 6, # This argument is used to interrupt training when
+    # mean squared error stops improving (decreasing) for more than two epochs. 
+    verbose = 1,
+    mode = "min", 
+    restore_best_weights = T), 
+  callback_reduce_lr_on_plateau( # Reduce learning rate if val_loss plateaus. 
+    monitor="val_loss",
+    factor = 0.1,
+    patience = 2, 
+    min_lr = 10e-8, 
+    mode = "min")
 )
 
 history.CAE <- model.CAE %>% fit( 
@@ -626,9 +646,11 @@ history.CAE <- model.CAE %>% fit(
 plot(history.CAE)
 ```
 
-We do some predictions. 
+We do some predictions to give an idea of the performance of the CAE, when it comes to if it is able to recreate the input images. 
 
 ```{r}
+model.CAE %>% evaluate(test.image_array_gen, steps = test_samples)
+
 index <- 1 # Only works with 1 index now, since batch size in testing is 1. 
 # Autoencoder
 output_cae <- model.CAE %>% predict(test.image_array_gen, steps = test_samples)
@@ -636,12 +658,23 @@ output_cae <- model.CAE %>% predict(test.image_array_gen, steps = test_samples)
 dim(output_cae)
 
 # Plot the first predicted image as an example. 
-plot(as.raster(output_cae[index,,,1]))
-im <- matrix(output_cae[index,,,], nrow = 128, ncol = 128)
-image(1:128, 1:128, im, col=gray((0:255)/255))
+#plot(as.raster(output_cae[index,,,1]))
+im <- matrix(output_cae[index,,,], nrow = img_height, ncol = img_height)
+image(1:img_height, 1:img_height, im, col=gray((0:255)/255))
+
+# Plot the first predicted image as an example. 
+#plot(as.raster(output_cae[index,,,1]))
+im <- matrix(output_cae[index,,,], nrow = img_height, ncol = img_height)
+image(1:img_height, 1:img_height, im, col=gray((0:255)/255))
 
 # Plot the real image. 
-plot(as.raster(generator_next(test.image_array_gen)[[1]][index,,,]))
+batch <- generator_next(test.image_array_gen)
+#plot(as.raster(batch[[1]][index,,,]))
+im <- matrix(batch[[1]][index,,,], 
+      nrow = img_height, ncol = img_height)
+rotate <- function(x) t(apply(x, 2, rev))
+image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255), 
+      axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][1]), xlab = "")
 # SVÆRT DÅRLIG MODELL LOL!
 
 # From input to encoder
@@ -651,7 +684,76 @@ dim(enc_output)
 # From encoder to decoder
 dec_output_cifra <- model_dec %>% predict(enc_output)
 dim(dec_output_cifra)
+# Same output as above!
+im <- matrix(dec_output_cifra[index,,,], nrow = 128, ncol = 128)
+image(1:128, 1:128, im, col=gray((0:255)/255))
 ```
+
+It is apparent that the images generated from the CAE seem to look very little like the input images, which is not a good sign. 
+
+Next we use the CAE as pre-training model for prediction of emission or not, to see what the performance is like in this regard. 
+
+```{r pretrainCAE}
+model.input <- layer_input(shape = c(img_height, img_width, channels, channels))
+model.output <- model.input %>% 
+  model_enc
+model.CAE.pre <- keras_model(model.input, model.output) 
+
+model.output2 <- model.output %>% 
+  layer_flatten() %>% 
+  layer_dense(img_height*2,activation = "relu") %>% # Couple with fully connected layers (DNN).
+  layer_dropout(0.4) %>% 
+  layer_dense(1,activation = "sigmoid")
+model.CAE.pred <- keras_model(model.input, model.output2) 
+
+summary(model.CAE.pred)
+freeze_weights(model.CAE.pred, from = 1, to = 2)
+summary(model.CAE.pred)
+
+model.CAE.pred %>% compile(
+  loss = "binary_crossentropy",
+  #optimizer = optimizer_adam(), # Adam is slow and gives worse performance it seems like. 
+  optimizer = optimizer_rmsprop(learning_rate = 1e-4), # decay does not seem to work very well. 
+  #optimizer = optimizer_adadelta() # Adadelta is slower and gives worse performance it seems like. 
+  metrics = c("accuracy")
+)
+
+# We save the model and its state (before fitting), so that 
+# it can be used when tuning the hyperparameter. 
+#model %>% save_model_hdf5("convnet.h5")
+
+cb <- callback_reduce_lr_on_plateau( # Reduce learning rate if val_loss plateaus. 
+    monitor="val_accuracy",
+    factor = 0.5,
+    patience = 3, 
+    min_lr = 10e-8, 
+    mode = "max")
+
+history.CAE.pred <- model.CAE.pred %>% fit(
+  train.image_array_gen,
+  # epochs
+  steps_per_epoch = as.integer(train_samples / batch_size), 
+  epochs = epochs, 
+  
+  # validation data
+  validation_data = val.image_array_gen,
+  validation_steps = as.integer(valid_samples / batch_size),
+  
+  callbacks = cb
+)
+plot(history.CAE.pred)
+```
+
+```{r predPretrainedCAE}
+model.CAE.pred %>% evaluate(test.image_array_gen, steps = test_samples)
+
+#test.image_array_gen$reset() # Done in case such that nothing will go wrong. 
+y_pred.CAE <- model.CAE.pred %>% predict(test.image_array_gen, steps = test_samples) %>% 
+    `>`(0.5) %>% k_cast("int32")
+y_pred.CAE <- as.array(y_pred.CAE)
+confusionMatrix(as.factor(test.image_array_gen$classes), as.factor(y_pred.CAE))
+```
+
 
 # Graphical Representation of Results from CAE
 
@@ -659,18 +761,18 @@ We represent graphically the results from the test images to show the associatio
 
 Ta en titt i cifar10_2classes "Visualizing what convnets learn". 
  
-```{r}
+```{r graphicalRepr, eval = F}
 # Encoder Results:
 par(mfrow = c(3,3))
 for(i in 1:8){
   #plot(as.raster(enc_output[2,,,i]), xlab = test.image_array_gen$classes[i])
-  im <- matrix(enc_output[1,,,i], nrow = 128, ncol = 128)
-  image(1:128, 1:128, im, col=gray((0:255)/255)) # Usikker på om denne transf skal brukes her, siden jeg allered har gjort preprocess med scaling!
+  im <- matrix(enc_output[1,,,i], nrow = img_height, ncol = img_height)
+  image(1:img_height, 1:img_height, im, col=gray((0:255)/255)) # Usikker på om denne transf skal brukes her, siden jeg allered har gjort preprocess med scaling!
 }
 par(mfrow = c(1,1))
 ```
 
-```{r}
+```{r prøver, eval = F}
 # Stuff from cifar10. 
 # Extract z layer from model.CAE. 
 z_layer_output <- lapply(model.CAE$layers[[1]]$layers[6], function(layer) layer$output)
@@ -694,7 +796,6 @@ plot_channel <- function(channel) {
 plot_channel(z_layer_activation[1,,,1])
 # ÅPENBART NOE SOM IKKE STEMMER HER?!?!?
 ```
-
 
 # Further Work
 
