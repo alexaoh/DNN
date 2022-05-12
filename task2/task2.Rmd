@@ -24,10 +24,13 @@ library(pROC)
 library(tidyverse)
 library(caret)
 library(ggplot2)
+library(Rtsne)
+#library(princurve)
+#library(sm)
 
-library(png)
+#library(png)
 #library(imager)
-library(tfdatasets)
+#library(tfdatasets)
 
 set.seed(params$seed)
 ```
@@ -328,7 +331,8 @@ for (i in seq(5, 11, 2)) {
   #plot(as.raster(batch[[1]][i,,,]), main = paste0("Label: ", batch[[2]][i]))
   im <- matrix(batch[[1]][i,,,], nrow = img_height, ncol = img_height)
   rotate <- function(x) t(apply(x, 2, rev))
-  image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][i]))
+  image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, 
+        ylab = paste0("Label: ", batch[[2]][i]), main = "Training Image")
 }
 ```
 
@@ -343,7 +347,8 @@ for (i in seq(5, 11, 2)) {
   #plot(as.raster(batch[[1]][i,,,]), main = paste0("Label: ", batch[[2]][i]))
   im <- matrix(batch[[1]][i,,,], nrow = img_height, ncol = img_height)
   rotate <- function(x) t(apply(x, 2, rev))
-  image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][i]))
+  image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, 
+        ylab = paste0("Label: ", batch[[2]][i]), main = "Validation Image")
 }
 ```
 
@@ -356,7 +361,8 @@ for (i in 1:4) {
   #plot(as.raster(batch[[1]][1,,,]))
   im <- matrix(batch[[1]][1,,,], nrow = img_height, ncol = img_height)
   rotate <- function(x) t(apply(x, 2, rev))
-  image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][1]))
+  image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255), axes = F, asp = 1, 
+        ylab = paste0("Label: ", batch[[2]][1]), main = "Testing Image")
 }
 ```
 
@@ -493,11 +499,9 @@ We can see that most of the errors the model makes is when predicting normal ima
 
 # Convolutional Autoencoder (CAE) Implementation
 
-We implement a CAE with 10 nodes in the $z$ layer (the bottleneck). The number of convolutional layers, filter sizes, number of filters are chosen ... 
+We implement a CAE with 10 nodes in the $z$ layer (the bottleneck). The rest of the architecture chosen is best seen in the code chunk below.
 
-Notice that the encoder consists of three convolutional layers and three max pooling layers. Additionally, notice that the decoder consists of three convolutional layers, one transpose convolutional layer and two upsamplig layers. Note that the decoder uses a transpose convolutional as the first hidden layer, in order to reverse the stride of 2 used in the last max pooling layer used in the encoder. 
-
-LEGG TIL DROPOUT ELLER LIGNENDE FOR Å UNNGÅ OVERFITTING?! (I STEDET ELLER I TILLEGG TIL DATA AUGMENTATION).
+Notice that the encoder consists of three convolutional layers, three max pooling layers and one dense fully connected layer. Additionally, notice that the decoder consists of three convolutional layers, one transpose convolutional layer, two upsampling layers and one dense fully connedected layer. The decoder uses a transpose convolutional layer as the second hidden layer, in order to mirror the stride of 2 used in the last max pooling layer used in the encoder. This is probably not necessary, but it has nevertheless been done in this case. 
 
 ```{r defineCAE}
 # Taken inspiration from: 
@@ -516,11 +520,15 @@ model_enc <- keras_model_sequential() %>%
   layer_conv_2d(filters = 16, kernel_size = c(3,3),
   activation = "relu", padding = "same") %>%
   layer_max_pooling_2d(pool_size = c(4,4), strides = c(2,2), 
-                       padding = "valid")
+                       padding = "valid") %>% 
+  layer_flatten() %>% 
+  layer_dense(10, activation = "relu")
 summary(model_enc)
 
 # Convolutional Decoder.
 model_dec <- keras_model_sequential() %>% 
+  layer_dense(units = 1600, activation = "relu", input_shape = c(10)) %>% 
+  layer_reshape(target_shape = c(10, 10, 16)) %>% 
   layer_conv_2d(filters = 16, kernel_size = c(3,3),
       activation = "relu", padding = "same",
       input_shape = c(10, 10, 16)) %>% 
@@ -542,7 +550,7 @@ model.CAE %>% model_enc %>% model_dec
 summary(model.CAE)
 ```
 
-We compile and fit the model. Notice that when fitting this model, we have tried both with and without image augmentation on the validation data as well USIKKER PÅ OM DETTE GIR MENING HER?! MULIG OM DATA AUGMENTATION GIR EN DÅRLIG MODELL, SIDEN DET ER EN AUTOENCODER!
+We compile and fit the model, adding callbacks for early stopping and reducing the learning rate on plateau. Notice that during the implementation we have tried fitting the model both with and without image augmentation (both on the training data and/or the validation data), and the results look similar in all cases. Because of this, in the end, we have simply chosen to use the same image generators as constructed earlier in the assignment. SJEKK AT DETTE FAKTISK STEMMER!
 
 ```{r, eval = F}
 # Denne har eval = F!
@@ -646,27 +654,31 @@ history.CAE <- model.CAE %>% fit(
 plot(history.CAE)
 ```
 
-We do some predictions to give an idea of the performance of the CAE, when it comes to if it is able to recreate the input images. 
+After training we do some predictions on the test data, which yields a first impression of the performance of the CAE; is it able to recreate the input images to some degree?
 
 ```{r}
 model.CAE %>% evaluate(test.image_array_gen, steps = test_samples)
 
 index <- 1 # Only works with 1 index now, since batch size in testing is 1. 
+
 # Autoencoder
 output_cae <- model.CAE %>% predict(test.image_array_gen, steps = test_samples)
 #output_cae <- as.array(output_cae)
 dim(output_cae)
+```
 
+First of all we can see that the output images are of the correct dimension. We plot the first predicted image as an example of the output from the model. 
+
+```{r}
 # Plot the first predicted image as an example. 
-#plot(as.raster(output_cae[index,,,1]))
 im <- matrix(output_cae[index,,,], nrow = img_height, ncol = img_height)
-image(1:img_height, 1:img_height, im, col=gray((0:255)/255))
+image(1:img_height, 1:img_height, im, col=gray((0:255)/255), 
+      xlab = "", ylab = "", axes = F)
+```
 
-# Plot the first predicted image as an example. 
-#plot(as.raster(output_cae[index,,,1]))
-im <- matrix(output_cae[index,,,], nrow = img_height, ncol = img_height)
-image(1:img_height, 1:img_height, im, col=gray((0:255)/255))
+The image does not make much sense; it does not look like our data at all. Let us plot the true image that the model was given as input when producing the output shown. 
 
+```{r}
 # Plot the real image. 
 batch <- generator_next(test.image_array_gen)
 #plot(as.raster(batch[[1]][index,,,]))
@@ -675,37 +687,27 @@ im <- matrix(batch[[1]][index,,,],
 rotate <- function(x) t(apply(x, 2, rev))
 image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255), 
       axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][1]), xlab = "")
-# SVÆRT DÅRLIG MODELL LOL!
-
-# From input to encoder
-enc_output <- model_enc %>% predict(test.image_array_gen, steps = test_samples)
-dim(enc_output)
-
-# From encoder to decoder
-dec_output_cifra <- model_dec %>% predict(enc_output)
-dim(dec_output_cifra)
-# Same output as above!
-im <- matrix(dec_output_cifra[index,,,], nrow = 128, ncol = 128)
-image(1:128, 1:128, im, col=gray((0:255)/255))
 ```
 
-It is apparent that the images generated from the CAE seem to look very little like the input images, which is not a good sign. 
-
-Next we use the CAE as pre-training model for prediction of emission or not, to see what the performance is like in this regard. 
+They do not look remotely similar, which, at first glance, suggests that the model is not able to reproduce the images. However, before we give up on this model, we use the CAE as a pre-training model for prediction of emission or not, to see what the performance is like in this regard. The code is given in the code chunk below, where the model is defined, compiled and fitted. The history after the fitting is plotted. 
 
 ```{r pretrainCAE}
+# First we build the encoder again, using the encoder we fit earlier. 
 model.input <- layer_input(shape = c(img_height, img_width, channels, channels))
 model.output <- model.input %>% 
   model_enc
 model.CAE.pre <- keras_model(model.input, model.output) 
 
+# Then we add some dense layers in the end, with a sigmoid output (one node).
 model.output2 <- model.output %>% 
   layer_flatten() %>% 
-  layer_dense(img_height*2,activation = "relu") %>% # Couple with fully connected layers (DNN).
-  layer_dropout(0.4) %>% 
+  layer_dense(100,activation = "relu") %>% # Couple with fully connected layers (DNN).
+  layer_dropout(0.2) %>% 
   layer_dense(1,activation = "sigmoid")
 model.CAE.pred <- keras_model(model.input, model.output2) 
 
+# Then we freeze the weights of the CAE, such that we only train the weights of the dense 
+# fully connected part now. 
 summary(model.CAE.pred)
 freeze_weights(model.CAE.pred, from = 1, to = 2)
 summary(model.CAE.pred)
@@ -718,16 +720,20 @@ model.CAE.pred %>% compile(
   metrics = c("accuracy")
 )
 
-# We save the model and its state (before fitting), so that 
-# it can be used when tuning the hyperparameter. 
-#model %>% save_model_hdf5("convnet.h5")
-
-cb <- callback_reduce_lr_on_plateau( # Reduce learning rate if val_loss plateaus. 
+cb <- list(callback_early_stopping(
+  monitor = "val_accuracy",
+    patience = 7, # This argument is used to interrupt training when
+    # mean squared error stops improving (decreasing) for more than two epochs. 
+    verbose = 1,
+    mode = "max", 
+    restore_best_weights = T),
+  callback_reduce_lr_on_plateau( # Reduce learning rate if val_loss plateaus. 
     monitor="val_accuracy",
     factor = 0.5,
     patience = 3, 
     min_lr = 10e-8, 
     mode = "max")
+)
 
 history.CAE.pred <- model.CAE.pred %>% fit(
   train.image_array_gen,
@@ -744,6 +750,8 @@ history.CAE.pred <- model.CAE.pred %>% fit(
 plot(history.CAE.pred)
 ```
 
+After the training we do some predictions and compare the performance of this model to that of the CNN built earlier in the assignment. 
+
 ```{r predPretrainedCAE}
 model.CAE.pred %>% evaluate(test.image_array_gen, steps = test_samples)
 
@@ -754,51 +762,180 @@ y_pred.CAE <- as.array(y_pred.CAE)
 confusionMatrix(as.factor(test.image_array_gen$classes), as.factor(y_pred.CAE))
 ```
 
+We can see that the performance of this model is worse than the CNN, which had a classification accuracy of around $60\%-70\%$. In general, this is not very good performance from a classifier, which might be because of a small amount of data and/or badly tuned hyperparameters in the models. The architectures might be lacking as well. For this pre-trained CAE, with 10 nodes in the bottleneck layer, I imagine that there are not enough nodes for this philosophy to be effective. I tried increasing the number of nodes in the trainable fully connected layer - this seemed to deteriorate the performance. I also tried using a pre-trained CNN without the dense layer in the encoder, i.e. with the final `max_pooling2d` layer of dimension `(None, 10, 10, 16)`, which gave a similar accuracy to the CNN. Thus, it seems to me, like we give up too much information in the images when reducing their dimension simply to 10 nodes, if prediction is the ultimate goal. I imagine that the goal here is more about demonstrating what happens in the bottleneck layer, which of couse is easier when the dimension is lower. Some representations of this will be shown next. 
 
 # Graphical Representation of Results from CAE
 
-We represent graphically the results from the test images to show the association between the activations in the $z$ layer and the class images. DO I USE GRADCAM HERE?? ELLER MENER HAN BARE Å PLOTTE ENCODER RESULTS FOR Å SE HVORDAN BILDENE SER UT ETTER ENCODEREN?
+In order to get more insight about the results from the CAE, we add some more graphical representations of what happens in the $z$-layer, i.e. the bottleneck. We predict on the test set using the encoder, such that the output is a dataset with 10 numerical values, representing the outputs from the 10 nodes, for each image in the test set. 
 
-Ta en titt i cifar10_2classes "Visualizing what convnets learn". 
- 
-```{r graphicalRepr, eval = F}
+<!-- First of all, we plot the outputs of the 16 filters in the $z$-layer, after prediction on the test images using the encoder. The filters shown below are the filters that result in the bottleneck when predicting on the first test image, which is the same image as shown above. Moreover, we plot a superposition of all the filters, i.e. the sum of all the filters (sums of all elements at the same pixel value in all the filters). -->
+
+```{r filtersInZLayer, eval = F, echo = F}
+# FORGET ABOUT THIS CODE, JUST LEFT IT FOR MY OWN SAKE LATER, SINCE IT WAS INTERESTING.
+# THIS DOES NOT MAKE SENSE WITH THIS MODEL ANYMORE
+# Prediction on test images using the encoder. 
+enc_output <- model_enc %>% predict(test.image_array_gen, steps = test_samples)
+dim(enc_output)
+
+superposition <- matrix(rep(0, 100), nrow = 10, ncol = 10)
 # Encoder Results:
 par(mfrow = c(3,3))
 for(i in 1:8){
   #plot(as.raster(enc_output[2,,,i]), xlab = test.image_array_gen$classes[i])
-  im <- matrix(enc_output[1,,,i], nrow = img_height, ncol = img_height)
-  image(1:img_height, 1:img_height, im, col=gray((0:255)/255)) # Usikker på om denne transf skal brukes her, siden jeg allered har gjort preprocess med scaling!
+  im <- matrix(enc_output[1,,,i], nrow = 10, ncol = 10)
+  superposition <- superposition + im
+  image(1:10, 1:10, im, col=gray((0:255)/255), main = paste0("Filter ", i), 
+        xlab = "", ylab = "", axes = F)
+}
+
+for(i in 9:16){
+  #plot(as.raster(enc_output[2,,,i]), xlab = test.image_array_gen$classes[i])
+  im <- matrix(enc_output[1,,,i], nrow = 10, ncol = 10)
+  superposition <- superposition + im
+  image(1:10, 1:10, im, col=gray((0:255)/255), main = paste0("Filter ", i), 
+        xlab = "", ylab = "", axes = F)
 }
 par(mfrow = c(1,1))
+
+image(1:10, 1:10, superposition, col=gray((0:255)/255), main = "Superposition of All the Filters", 
+        xlab = "", ylab = "", axes = F)
+
 ```
 
-```{r prøver, eval = F}
-# Stuff from cifar10. 
-# Extract z layer from model.CAE. 
-z_layer_output <- lapply(model.CAE$layers[[1]]$layers[6], function(layer) layer$output)
-activation_model <- keras_model(inputs = model_enc$input, outputs = z_layer_output)
 
-img.data <- generator_next(test.image_array_gen)
-img <- img.data[[1]][1,,,]
-(label <- img.data[[2]][1])
-
-img_tensor <- array_reshape(img,c(1,image_size)) # er dette nødvendig?
-dim(img_tensor)
-activations <- activation_model %>% predict(img_tensor)
-z_layer_activation <- activations[[1]]
-dim(z_layer_activation)
-
-plot_channel <- function(channel) {
-  rotate <- function(x) t(apply(x, 2, rev))
-  image(rotate(channel), axes = FALSE, asp = 1,
-  col = terrain.colors(12))
-}
-plot_channel(z_layer_activation[1,,,1])
-# ÅPENBART NOE SOM IKKE STEMMER HER?!?!?
+```{r }
+# Prediction on test images using the encoder. 
+enc_output <- model_enc %>% predict(test.image_array_gen, steps = test_samples)
+dim(enc_output)
 ```
 
-# Further Work
+<!-- We cannot really learn anything from this, but it may still be interesting to see what the bottleneck activations look like.  -->
 
-As we have seen, neither of the models employed do a very good job in separating between normal X-ray images and the images with effusion. Because of shortage of time close to the end of the spring semester, it was not possible to keep improving these models. I have already tried to combat overfitting problems (especially in the CNN) by using data augmentation in the image generators, adding dropout and L2 kernel regularization. This is something I would have liked to do to a greater extent before delivering this report, but perhaps it can be done after.
+```{r}
+heatmap(enc_output) # Interpret this heatmap!!
+```
 
-HOWEVER, NOTICE ALSO THAT WE DO NOT HAVE A LOT OF DATA (1000 IMAGES). FÅ MED DETTE I DISKUSJONEN OVER OGSÅ, SOM MULIG ÅRSAK TIL AT MODELLENE IKKE ER SÅ VELDIG GODE. 
+The heatmap signals that the 10 nodes in the bottleneck have not been able to separate between the images, displayed row-wise on the right side of the heatmap. 
+
+The first method we use with the intention of understanding what is going on in the bottleneck, is Hierarchical Clustering. We cluster the predictions below. 
+
+```{r}
+df.enc <- as.data.frame(enc_output)
+df <- cbind(df.enc, "true" = test.image_array_gen$classes)
+hcl1 <- hclust(dist(df %>% select(-c(true))) , method="ward.D") # Euclidean distance, ward.D method. 
+plot(hcl1)
+```
+
+We cut the dendrogram at two clusters, since we know that the data is split up into two clusters. 
+
+```{r}
+clusts <- cutree(hcl1, 2)
+table(clusts)
+
+# Add the cluster label to each of the data points. 
+df$cluster <- clusts 
+```
+
+If the model has been able to generalize the data, there should be about half and half of each of the clusters, meaning `r test_samples/2` points in each class. This is not entirely true, as seen above, but it is not terrible at first glance. Since we know the true labels, it is interesting to see what percentage of cluster indices are different from the true labels. 
+
+```{r}
+count(df %>% filter(true != (cluster-1)))
+```
+
+We can see that a large amount of the data set - over half! Let us investigate how many of each of the true labels are clustered in each of the two clusters. 
+
+```{r}
+table(df %>% select(c(true, cluster)))
+```
+
+This does not look promising; the clusters do not clearly differentiate between normal X-rays (labeled 1) and X-rays with effusion (labeled 0).
+
+We do the same investigation with K-means clustering, with $K = 2$.
+
+```{r}
+df2.enc <- as.data.frame(enc_output)
+df2 <- cbind(df2.enc, "true" = test.image_array_gen$classes)
+km <- kmeans(df2 %>% select(-c(true)), 2)
+df$kmcluster <- km$cluster
+
+# Count the number of wrongly predicted clusters.
+count(df %>% filter(true != (kmcluster-1)))
+```
+
+The amount of wrongly clustered images is slightly lower compared with hierarchical clustering. We check how many clusters are unequal between the two methods. 
+
+```{r}
+count(df %>% filter(kmcluster == cluster))
+```
+
+We can see that some of the assigned clusters are different, meaning that the two methods do not fully agree (given that they have labeled the clusters in the similar "direction"). This is something to keep in mind when using all these methods, because they influence the conclusions we make about what the bottleneck in the CAE has done, which is our main objective here. How does the clustering look compared to the true labels for K-means clustering?
+
+```{r}
+table(df %>% select(c(true, kmcluster)))
+```
+
+Still not promising. 
+
+In order to even better illustrate what the bottleneck does with the images, i.e. how it represents the images, we reduce the dimensions of the predictions using Principal Component Analysis (PCA).
+
+```{r PCA}
+pca <- princomp(df %>% select(-c(true, cluster, kmcluster)))
+summary(pca)
+```
+
+We can see that the first principal component seems to capture almost all the variance in the predictions. 
+
+```{r}
+biplot(pca)
+```
+
+From the biplot we can see that most nodes have negative loadings in the first component, while the second component almost does not differentiate between them. No clear clustering tendencies in the scores. 
+
+We plot the first components, coloring in the labels of the type of image (normal or effusion). 
+
+```{r}
+df.plotting <- data.frame(Comp1 = pca$scores[,1], Comp2 = pca$scores[,2], label = factor(df$true), 
+                          hcluster = factor(df$cluster-1), kmcluster = factor(df$kmcluster-1))
+
+df.final.plot <- df.plotting %>% gather(key = type, value = value, -c(Comp1, Comp2))
+
+#df2 <- data.frame(Comp1 = pca$scores[,1], Comp2 = pca$scores[,2], label = factor(df$true))
+df.final.plot %>% ggplot(aes(x = Comp1, y = Comp2)) + 
+   geom_point(aes(color = value)) +
+   theme_minimal() +
+   ggtitle("First Two Components from PCA Colored by Clusters and True Labels") +
+   facet_wrap(~type)
+
+# df3 <- data.frame(Comp1 = pca$scores[,1], Comp2 = pca$scores[,2], cluster = factor(df$cluster))
+# df3 %>% ggplot(aes(x = Comp1, y = Comp2)) + 
+#    geom_point(aes(color = cluster)) +
+#    theme_minimal() +
+#    ggtitle("First Two Components from PCA Colored by Cluster")
+```
+
+This plot is very illustrative. We can see that the clusters are clearly separable in the two first principal components, while the true labels are not at all. Thus, it seems like the method of PCA, which is a linear dimensionality reduction method, cannot capture non-linear relationships in the bottleneck. It is unsure if this is non-separability of the true images following the predictions using the encoder is a result of the encoder itself, i.e. the bottleneck not being able to differentiate between them, or if it is a drawback of PCA. Therefore, we try a non linear dimensionality reduction technique as well. There exist many different such methods, for example ISOMAP, Kernel PCA, Local MDS and t-SNE. 
+
+Our non-linear dimensionality reduction method of choice is t-SNE. We use it to reduce to two dimensions, which might be very strict. The results from the algorithm are plotted below. Notice that the hyperparameter `perplexity` needs to be set for this algorithm, which is set somewhat arbitrarily or heuristically in this case. 
+
+```{r}
+tsne <- Rtsne(df %>% select(-c(true, cluster, kmcluster)), dims = 2, perplexity = 40, theta = 0)
+tsne.points <- tsne$Y
+
+df.plotting2 <- data.frame(Comp1 = tsne.points[,1], Comp2 = tsne.points[,2], label = factor(df$true), 
+                          hcluster = factor(df$cluster-1), kmcluster = factor(df$kmcluster-1))
+
+df.final.plot2 <- df.plotting2 %>% gather(key = type, value = value, -c(Comp1, Comp2))
+
+#df2 <- data.frame(Comp1 = pca$scores[,1], Comp2 = pca$scores[,2], label = factor(df$true))
+df.final.plot2 %>% ggplot(aes(x = Comp1, y = Comp2)) + 
+   geom_point(aes(color = value)) +
+   theme_minimal() +
+   ggtitle("First Two Components from t-SNE Colored by Clusters and True Labels") +
+   facet_grid(~type)
+```
+
+Also for this method, we can see that we cannot separate between the normal and the effusion X-ray images in two dimensions. I am inclined to conclude that the CAE is not able to represent the two different images to a sufficient accuracy with only 10 nodes in the bottleneck, as briefly discussed earlier when trying to use the CAE as a pre-training model. 
+
+# Final Remarks and Further Work
+
+As we have seen, neither of the models employed do a very good job in separating between normal X-ray images and the images with effusion. Because of shortage of time close to the end of the spring semester, it was not possible to keep improving these models. I have already tried to combat overfitting problems (especially in the CNN) by using data augmentation in the image generators, adding dropout and L2 kernel regularization. This is something I would have liked to do to a greater extent before delivering this report, but perhaps it can be done after. Notice also that we do not have a lot of data, which for sure is a reason to why the models do not yield greater performance. Lastly, I think the CAE suffers from the restriction of having 10 nodes in the bottleneck, as I found better performance when leaving convolutional layers in the bottleneck, but I understand that the purpose here is to analyze a bit more what happens in the bottleneck, which is easier with fewer nodes. 
