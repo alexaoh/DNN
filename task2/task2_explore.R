@@ -22,7 +22,7 @@ img_height <- 128
 target_size <- c(img_width, img_height)
 batch_size <- FLAGS$batch_size # Set the batch size to the given flag.
 epochs <- 30
-channels <- 3 # RGB = 3 channels
+channels <- 1 # RGB = 3 channels
 image_size <- c(target_size, channels)
 
 # optional data augmentation.
@@ -59,7 +59,7 @@ train.image_array_gen <- flow_images_from_directory(train.path,
                                                     seed = glob.seed, # Change to params$seed in Rmd.
                                                     target_size = target_size,
                                                     batch_size = batch_size,
-                                                    #color_mode = "grayscale",
+                                                    color_mode = "grayscale",
                                                     subset = "training")
 
 # validation images. 
@@ -69,7 +69,7 @@ val.image_array_gen <- flow_images_from_directory(train.path,
                                                   seed = glob.seed, # Change to params$seed in Rmd.
                                                   target_size = target_size,
                                                   batch_size = batch_size,
-                                                  #color_mode = "grayscale",
+                                                  color_mode = "grayscale",
                                                   subset = "validation")
 
 test.image_array_gen <- flow_images_from_directory(test.path, 
@@ -78,7 +78,7 @@ test.image_array_gen <- flow_images_from_directory(test.path,
                                                    seed = glob.seed, # Change to params$seed in Rmd.
                                                    target_size = target_size,
                                                    batch_size = 1,
-                                                   #color_mode = "grayscale"
+                                                   color_mode = "grayscale",
                                                    shuffle = F # Makes it easier to check with 
                                                    # true class labels after predicting.
 )

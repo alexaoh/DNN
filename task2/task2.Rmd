@@ -41,9 +41,11 @@ We are given two data sets of images; 500 normal X-ray images and 500 X-ray imag
 
 # Preprocessing
 
-First we separate the data into two sets; a training set containing $\frac23$ of the data and a test set containing the remaining $\frac13$. In order to do this, we assume that both sets of images are saved in a directory called "images". This directory contains the 500 normal X-ray images in a sub directory called "normal", and the 500 X-ray images with effusion in a sub directory called "effusion". The images are given in png format. After this split, we split the training data into a "pure" training set and a validation data set, where the former takes $\frac45$ of the values and the latter takes $\frac15$ of the values (thus, in total data set terms, the former takes $\frac{8}{15}$ and the latter takes $\frac{2}{15}$ of the complete data set. The remaining $\frac13$ is still left to the test set). 
+First we separate the data into two sets; a training set containing $\frac23$ of the data and a test set containing the remaining $\frac13$. In order to do this, we assume that both sets of images are saved in a directory called "images". This directory contains the 500 normal X-ray images in a sub directory called "normal", and the 500 X-ray images with effusion in a sub directory called "effusion". The images are given in png format.
 
-We create three (or two, without the validation directory, depending on the parameter `DA.valid`) new sub directories within the "images" directory; one called "test", which contains the randomly sampled test data, one called "train", which contains the randomly sampled training data and one called "valid", which contains the randomly sample validation data, which is sampled from the training data. The last directory is only created if `params$DA.valid` is set to `TRUE`. The reason behind this parameter will be explained later. We assume that these directories have not been created on the computer earlier (this is very important in order for the data to be divided correctly between the directories!). We could implement some sort of deletion of old directories if they already exist, but I have chosen to skip this for now. 
+We create three (or two, without the validation directory, depending on the parameter `DA.valid`) new sub directories within the "images" directory; one called "test", which contains the randomly sampled test data, one called "train", which contains the randomly sampled training data and one called "valid", which contains the randomly sampled validation data, which is sampled from the training data. Thus, this directory of images is constructed by splitting the training data into a "pure" training set and a validation data set, where the former takes $\frac45$ of the values and the latter takes $\frac15$ of the values (thus, in total data set terms, the former takes $\frac{8}{15}$ and the latter takes $\frac{2}{15}$ of the complete data set. The remaining $\frac13$ is still left to the test set). The directory with validation data is only created if `params$DA.valid` is set to `FALSE`. The reason behind this parameter will be explained later. By the way, the naming of the parameter is shorthand for `Data Augmentation on Validation Data`. Perhaps this will make the point of the parameter clearer immediately. We assume that these directories have not been created on the computer earlier (this is very important in order for the data to be divided correctly between the directories!). We could implement some sort of deletion of old directories if they already exist, but I have chosen to skip this for now. 
+
+Thus, if the parameter `params$DA.valid` is set to `FALSE` we create the three different directories, which then will be used throughout the assignment. On the other hand, if the parameter is set to `TRUE`, we only create the train ($\frac23$) and the test ($\frac13$) directories of images. In this case, the validation set is created from the training set inside of R, while compiling the code. Thus, the splits of the data remains the same in both cases (train $\frac{8}{15}$, validation $\frac{2}{15}$ and test $\frac{1}{5}$), but there are some differences in the images. This will become clear once we start building the models. 
 
 ```{r makeDIRs}
 set.seed(params$seed) # Set seed to 1234, as chosen in params. 
@@ -204,9 +206,9 @@ if(!params$DA.valid){
 
 # Image Data Generators 
 
-Simply loading all 1000 images into the memory is (in most cases) not feasible. We make image data generators in order to work with models. These are image processing helper tools from Keras, which are used to turn image files on disk into batches of pre-processed tensors. The function `image_data_generator` can be used to generate batches with real-time data augmentation. Thus, this function can be used to pre-process the images. We rescale the images in $[0,1]$ using this function. Moreover, we apply some image augmentation, like shifting, zooming and change of brightness. This is done to avoid overfitting during model training, i.e. to improve the generalization abilities of the models. The function `flow_images_from_directory` takes, among other arguments, a directory and an image generator as input, and generates batches of images from the specified directory, following the pre-processing rules given in the generator. We also choose the target size of the images, i.e. the width and height, where the original images are $512 \times 512$. As mentioned earlier, we also choose a validation split of $\frac15$, which means that one fifth of the training data will be used for model validation during fitting. 
+Simply loading all 1000 images into the memory is (in most cases) not feasible. We make image data generators in order to work with models. These are image processing helper tools from Keras, which are used to turn image files on disk into batches of pre-processed tensors. The function `image_data_generator` can be used to generate batches with real-time data augmentation. Thus, this function can be used to pre-process the images. We rescale the images in $[0,1]$ using this function. Moreover, we apply some image augmentation, like shifting, zooming and change of brightness. This is done to avoid overfitting during model training, i.e. to improve the generalization abilities of the models. The function `flow_images_from_directory` takes, among other arguments, a directory and an image generator as input, and generates batches of images from the specified directory, following the pre-processing rules given in the generator. We also choose the target size of the images, i.e. the width and height, where the original images are $512 \times 512$. As mentioned earlier, if `params$DA.valid` is set to `TRUE`, we also choose a validation split of $\frac15$, which means that one fifth of the training data will be used for model validation during fitting. 
 
-Notice that we have tried training the model both with and without data augmentation on the validation data, following the discussion (e.g.) in [this thread](https://stackoverflow.com/questions/48029542/data-augmentation-in-test-validation-set). I wanted to test both variants, since it is not completey clear which is most coherent and I think both could make sense, depending on the philosophy one follows. It is not clear to me which is the best, as they seem to give similar results according to the performance assessment. Therefore, I have chosen to set the parameter `params$DA.valid` to `TRUE` during my discussion in this report, even though both options are aptly implemented and tested simply by changing the value of the parameter. When wanting to add image augmentation to the validation data, we set the parameter `DA.valid` to `TRUE`, which then does not make the directory for validation data in the preprocessing above. The generators below are therefore defined in slightly different ways depending on the value of the parameter, where I have tried to explain the methodologies as clearly as possible in the code below. 
+Notice that we have tried training the model both with and without data augmentation on the validation data, following the discussion (e.g.) in [this thread](https://stackoverflow.com/questions/48029542/data-augmentation-in-test-validation-set). I wanted to test both variants, since it is not completey clear which is most coherent and I think both could make sense, depending on the philosophy one follows. It is not clear to me which is the best, as they seem to give similar results according to the performance assessment. Therefore, I have chosen to set the parameter `params$DA.valid` to `TRUE` during my discussion in this report, even though both options are aptly implemented and tested simply by changing the value of the parameter (and running the entire code, after deleting the old image directories created earlier, just to be safe). When wanting to add image augmentation to the validation data, we set the parameter `DA.valid` to `TRUE`, which then does not make the directory for validation data in the preprocessing above. The generators below are therefore defined in slightly different ways depending on the value of the parameter, where I have tried to explain the logic as clearly as possible in the code below. 
 
 ```{r splitDATA}
 img_width <- img_height <- 128 # or 256, 128, 64 or 32. 
@@ -317,14 +319,14 @@ d1 <- cbind(c("effusion", "normal"),
 knitr::kable(d1, caption = "Encoding")
 ```
 
-The generators yield the batches indefinitely, which means that they act like infinite loops over the images in the specified directories. 
+The generators yield the batches indefinitely, which means that they act like infinite loops over the images in the specified directories. Notice that the normal class of images is coded as 1 and the effusion class of images is coded as 0. This choice is insignificant for us and is chosen by the image generators. 
 
-We have a short look at some of the images from the training data set, to get a feel for what the pictures may look like. Notice that the normal class of images is coded as 1 and the effusion class of images is coded as 0. This choice is insignificant for us and is chosen by the image generators. 
+We have a short look at some of the images from the training data set, to get a feel for what the pictures may look like. 
 
 ```{r}
 # Element generate.
 batch <- generator_next(train.image_array_gen)
-str(batch)
+#str(batch)
 
 op <- par(mfrow = c(2, 2), pty = "s", mar = c(1, 0, 1, 0))
 for (i in seq(5, 11, 2)) {
@@ -340,7 +342,7 @@ Some of the validation images are shown as well, which may be augmented, dependi
 
 ```{r}
 batch <- generator_next(val.image_array_gen)
-str(batch)
+#str(batch)
 
 op <- par(mfrow = c(2, 2), pty = "s", mar = c(1, 0, 1, 0))
 for (i in seq(5, 11, 2)) {
@@ -398,6 +400,8 @@ We define the CNN with choice of optimizer, loss function and metric, before we 
 
 After defining the model conveniently, we fit the model. Because the image generators loop endlessly over the images on disk, we need to specify the total number of steps, or batches, before declaring on epoch as finished. Since we are using a generator for both the training data and the validation data, we need to specify this value for both the training data and the validation data. This is done with the arguments `steps_per_epoch` and `validation_steps` below. 
 
+Notice that, during fitting, we use a callback that reduces the learning rate if the validation accuracy stops improving for 2 epochs. This was added after fitting the model the first times, in order to try to increase the accuracy on both the training and the validation data. The history after training is plotted. We can see that the accuracy in both the training and the validation data stabilizes and "flattens out". This indicates that the model most likely won't be able to improve much more in this regard, with the given architecture, optimizer and hyperparameter choices. 
+
 ```{r trainCNN}
 model %>% compile(
   loss = "binary_crossentropy",
@@ -437,7 +441,7 @@ plot(history)
 
 We tune the hyperparameter `batch_size` using the `tfruns` package. This is done exploring the grid `r c(16, 32, 64)` for the values of the hyperparameter. 
 
-This is done in separate files, which are delivered with this report and Rmd. For each of the values in the grid we want to explore, we load the saved model and fit it with the data generators defined using the respective batch size we want to test for. We need to redefine the data generators for each of the three models, because they decide the batch sizes. Notice that this is only implemented for the variant of the solution where data augmentation is performed on both training data and validation data, i.e. when the parameter `params$DA.valid` is set to `TRUE`.
+This is done in separate files, which are delivered with this report and Rmd. For each of the values in the grid we want to explore, we load the saved model and fit it with the data generators defined using the respective batch size we want to test for. We need to redefine the data generators for each of the three models, because the batch sizes are set in the generators. Notice that this is only implemented for the variant of the solution where data augmentation is performed on both training data and validation data, i.e. when the parameter `params$DA.valid` is set to `TRUE`.
 
 The results from running the file `task2_tfruns.R`, which calls on `task2_explore.R` for each different batch size on the grid, seem to show that a batch size of 64 yields the best results, according to the metric validation accuracy. 
 
