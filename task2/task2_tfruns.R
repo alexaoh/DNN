@@ -12,7 +12,7 @@ for (u in scenarios){
 }
 
 # Check the performance to different scenarios
-performance.table <-  ls_runs(metric_val_accuracy > 0.4, order = metric_val_accuracy)
+(performance.table <-  ls_runs(metric_val_accuracy > 0.4, order = metric_val_accuracy))
 
 # Print the units of each of the runs in the performance table. 
 performance.table$flag_batch_size

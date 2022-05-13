@@ -4,17 +4,24 @@ subtitle: "Statistical Learning with Deep Artificial Neural Networks"
 author: "Alexander J Ohrt"
 date: "`r format(Sys.time(), '%d. %b. %Y')`"
 output: 
-   html_document:
-    code_folding: hide
-    theme: yeti
-    highlight: textmate
+   # html_document:
+   #  code_folding: hide
+   #  theme: yeti
+   #  highlight: textmate
+   #  number_sections: true
+   #  toc: true
+   #  latex_engine: xelatex
+  pdf_document:
+    fig_caption: true
     number_sections: true
-    toc: true
-    latex_engine: xelatex
+    toc: false
 params: 
   seed: 1234
   DA.valid: TRUE
 ---
+
+\tableofcontents
+\newpage
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, comment = "#>", warning = F)
@@ -208,7 +215,7 @@ if(!params$DA.valid){
 
 Simply loading all 1000 images into the memory is (in most cases) not feasible. We make image data generators in order to work with models. These are image processing helper tools from Keras, which are used to turn image files on disk into batches of pre-processed tensors. The function `image_data_generator` can be used to generate batches with real-time data augmentation. Thus, this function can be used to pre-process the images. We rescale the images in $[0,1]$ using this function. Moreover, we apply some image augmentation, like shifting, zooming and change of brightness. This is done to avoid overfitting during model training, i.e. to improve the generalization abilities of the models. The function `flow_images_from_directory` takes, among other arguments, a directory and an image generator as input, and generates batches of images from the specified directory, following the pre-processing rules given in the generator. We also choose the target size of the images, i.e. the width and height, where the original images are $512 \times 512$. As mentioned earlier, if `params$DA.valid` is set to `TRUE`, we also choose a validation split of $\frac15$, which means that one fifth of the training data will be used for model validation during fitting. 
 
-Notice that we have tried training the model both with and without data augmentation on the validation data, following the discussion (e.g.) in [this thread](https://stackoverflow.com/questions/48029542/data-augmentation-in-test-validation-set). I wanted to test both variants, since it is not completey clear which is most coherent and I think both could make sense, depending on the philosophy one follows. It is not clear to me which is the best, as they seem to give similar results according to the performance assessment. Therefore, I have chosen to set the parameter `params$DA.valid` to `TRUE` during my discussion in this report, even though both options are aptly implemented and tested simply by changing the value of the parameter (and running the entire code, after deleting the old image directories created earlier, just to be safe). When wanting to add image augmentation to the validation data, we set the parameter `DA.valid` to `TRUE`, which then does not make the directory for validation data in the preprocessing above. The generators below are therefore defined in slightly different ways depending on the value of the parameter, where I have tried to explain the logic as clearly as possible in the code below. 
+Notice that we have tried training the model both with and without data augmentation on the validation data, following the discussion (e.g.) in [this thread](https://stackoverflow.com/questions/48029542/data-augmentation-in-test-validation-set). I wanted to test both variants, since it is not completely clear which is most coherent and I think both could make sense, depending on the philosophy one follows. It is not clear to me which is the best, even though the version with image augmentation in both data sets seems to be able to generalize better and give better results on the test set. Therefore, I have chosen to set the parameter `params$DA.valid` to `TRUE` during my discussion in this report, even though both options are aptly implemented and tested simply by changing the value of the parameter (and running the entire code, after deleting the old image directories created earlier, just to be safe). When wanting to add image augmentation to the validation data, we set the parameter `DA.valid` to `TRUE`, which then does not make the directory for validation data in the preprocessing above. The generators below are therefore defined in slightly different ways depending on the value of the parameter, where I have tried to explain the logic as clearly as possible in the code below. 
 
 ```{r splitDATA}
 img_width <- img_height <- 128 # or 256, 128, 64 or 32. 
@@ -443,7 +450,7 @@ We tune the hyperparameter `batch_size` using the `tfruns` package. This is done
 
 This is done in separate files, which are delivered with this report and Rmd. For each of the values in the grid we want to explore, we load the saved model and fit it with the data generators defined using the respective batch size we want to test for. We need to redefine the data generators for each of the three models, because the batch sizes are set in the generators. Notice that this is only implemented for the variant of the solution where data augmentation is performed on both training data and validation data, i.e. when the parameter `params$DA.valid` is set to `TRUE`.
 
-The results from running the file `task2_tfruns.R`, which calls on `task2_explore.R` for each different batch size on the grid, seem to show that a batch size of 64 yields the best results, according to the metric validation accuracy. 
+The results from running the file `task2_tfruns.R`, which calls on `task2_explore.R` for each different batch size on the grid, seem to show that a batch size of 32 yields the best results, according to the metric validation accuracy. In other words, the run where a batch size of 32 was used seems to yield the largest validation accuracy. Not only is the validation accuracy highest for this batch size, but the model yields slightly larger specificity and slightly larger positive predictive value. The AUC is also slightly larger. However, despite our conclusion of 32 as better, the runs are marginally different, as there is not much that separates the two models. The differences we see could very well be up to chance as well. Choosing either one of the hyperparameter values (either 32 or 64) would likely yield almost the same performance. The runs used during this deliberation are added to delivery, in case this is interesting information to the reader. Notice for example that if you regard the sensitivity and the negative predictive value as more important, which is a completely valid reflection to make, you might be inclined to choose the model run with a batch size of 64, but it is up to the each and every data scientist (and their teams) to decide. 
 
 # Early Stopping
 
@@ -475,7 +482,7 @@ history <- model %>% fit(
 plot(history)
 ```
 
-We notice that it seems like a patience of 2 seems to be a bit strict for this model, since it stops training relatively early. 
+We notice that it seems like a patience of 2 seems to be a bit strict for this model, since it stops training relatively early. If this was not a clear criteria in the assignment question, I would increase this patience a bit, in order to let the model train for longer. 
 
 # Performance Assessment of CNN
 
@@ -494,18 +501,16 @@ Next we make predictions on every test image.
 y_pred <- model %>% predict(test.image_array_gen, steps = test_samples) %>% 
     `>`(0.5) %>% k_cast("int32")
 y_pred <- as.array(y_pred)
-confusionMatrix(as.factor(test.image_array_gen$classes), as.factor(y_pred))
+(mat.CNN <- confusionMatrix(as.factor(test.image_array_gen$classes), as.factor(y_pred)))
 ```
 
-The confusion matrix shows that the model performs very badly on the test images, rendering it useless in practice. 
-
-We can see that most of the errors the model makes is when predicting normal images (1) as having an effusion (0), i.e. it often predicts effusion on X-ray images that in reality are normal. When predicting images as normal, it makes a lot less mistakes, since most of the predictions are normal according to the true labels. 
+The confusion matrix shows that the model performs better than random according to accuracy, where random prediction (or simply predicting one class always) would give $50\%$ accuracy. From studying the confusion matrix a bit more, we can see that the model, for the most part, does a good job in predicting true normal images correctly. In fact, it predicts this case correctly in `r mat.CNN$byClass[4][[1]]` percent of the cases, which is given by the negative predictive value in this case (because, by default, 0, or effusion, is regarded as a positive result from the test, since it is the first factor). On the other hand, we can see that the model struggles to predict images with true effusion correctly. The positive predictive value is only `r mat.CNN$byClass[3][[1]]`, which means that the model predicts effusion on a lot of the images that are normal. In this regard the model does a very bad job. The sensitivity and specificity are `r mat.CNN$byClass[1][[1]]` and `r mat.CNN$byClass[2][[1]]` respectively. A larger sensitivity means that the model is able to detect a lot of the cases of true effusion, i.e. a large number of images with effusion are identified by the model. This means that it is likely that an image that has effusion is identified by the model. This is somewhat the case in this model. Similarly, a larger specificity means that the model is able to detect a lot of the cases of true normal images, i.e. a large number of images that are truly normal are identified as normal by the model. This is not really the case for this model. Thus, it is likely that a normal image is classified as positive, i.e. is classified as having effusion. 
 
 # Convolutional Autoencoder (CAE) Implementation
 
 We implement a CAE with 10 nodes in the $z$ layer (the bottleneck). The rest of the architecture chosen is best seen in the code chunk below.
 
-Notice that the encoder consists of three convolutional layers, three max pooling layers and one dense fully connected layer. Additionally, notice that the decoder consists of three convolutional layers, one transpose convolutional layer, two upsampling layers and one dense fully connedected layer. The decoder uses a transpose convolutional layer as the second hidden layer, in order to mirror the stride of 2 used in the last max pooling layer used in the encoder. This is probably not necessary, but it has nevertheless been done in this case. 
+Notice that the encoder consists of three convolutional layers, three max pooling layers and one dense fully connected layer. Additionally, notice that the decoder consists of three convolutional layers, one transpose convolutional layer, two upsampling layers and one dense fully connected layer. The decoder uses a transpose convolutional layer as the second hidden layer, in order to mirror the stride of 2 used in the last max pooling layer used in the encoder. This is perhaps not necessary, but it has nevertheless been done in this case. 
 
 ```{r defineCAE}
 # Taken inspiration from: 
@@ -551,70 +556,9 @@ model.CAE <- keras_model_sequential()
 
 # Autoencoder.
 model.CAE %>% model_enc %>% model_dec
-summary(model.CAE)
 ```
 
-We compile and fit the model, adding callbacks for early stopping and reducing the learning rate on plateau. Notice that during the implementation we have tried fitting the model both with and without image augmentation (both on the training data and/or the validation data), and the results look similar in all cases. Because of this, in the end, we have simply chosen to use the same image generators as constructed earlier in the assignment. SJEKK AT DETTE FAKTISK STEMMER!
-
-```{r, eval = F}
-# Denne har eval = F!
-batch_size <- 32
-# TESTING WITH DATA WITHOUT AUGMENTATION. 
-# Try to generate data again, now without data augmentation. 
-# optional data augmentation.
-train_data_gen <- image_data_generator(
-  rescale = 1/255,
-  validation_split = 1/5
-)
-
-# We do not apply the data-augmentation (except from rescaling)
-# to the testing data set, since it is important 
-# to validate on the true images we have been given. 
-test_data_gen <- image_data_generator(
-  rescale = 1/255
-)
-
-train.image_array_gen <- flow_images_from_directory(train.path, 
-                                                  train_data_gen,
-                                                  class_mode = "binary",
-                                                  seed = params$seed, 
-                                                  target_size = target_size,
-                                                  batch_size = batch_size,
-                                                  color_mode = "grayscale",
-                                                  subset = "training"
-                                                  )
-
-# If we choose to use data augmentation on the validation data, 
-# then we use the same image data generator as for the training data. 
-val.image_array_gen <- flow_images_from_directory(train.path, 
-                                                 train_data_gen,
-                                                 class_mode = "binary",
-                                                 seed = params$seed, 
-                                                 target_size = target_size,
-                                                 batch_size = batch_size,
-                                                 color_mode = "grayscale",
-                                                 subset = "validation")
-
-
-test.image_array_gen <- flow_images_from_directory(test.path, 
-                                                    test_data_gen,
-                                                    class_mode = "binary",
-                                                    seed = params$seed,
-                                                    target_size = target_size,
-                                                    batch_size = 1,
-                                                    color_mode = "grayscale", 
-                                                    shuffle = F # Makes it easier to check with 
-                                                    # true class labels after predicting. 
-                                                    )
-
-# number of training samples
-(train_samples <- train.image_array_gen$n)
-# number of validation samples
-(valid_samples <- val.image_array_gen$n)
-# number of testing samples
-(test_samples <- test.image_array_gen$n)
-```
-
+We compile and fit the model, adding callbacks for early stopping and reducing the learning rate on plateau. Notice that during the implementation we have tried fitting the model both with and without image augmentation (both on the training data and/or the validation data), and the results look better in the image augmentation case (`params$DA.valid` is `TRUE`). Because of this, in the end, we have simply chosen to use the same image generators as constructed earlier in the assignment. 
 
 ```{r trainCAE}
 model.CAE %>% compile(
@@ -680,7 +624,7 @@ image(1:img_height, 1:img_height, im, col=gray((0:255)/255),
       xlab = "", ylab = "", axes = F)
 ```
 
-The image does not make much sense; it does not look like our data at all. Let us plot the true image that the model was given as input when producing the output shown. 
+The image does not make much sense; it does not resemble our data. Let us plot the true image that the model was given as input when producing the output shown. 
 
 ```{r}
 # Plot the real image. 
@@ -693,7 +637,7 @@ image(1:img_height, 1:img_height, rotate(im), col=gray((0:255)/255),
       axes = F, asp = 1, ylab = paste0("Label: ", batch[[2]][1]), xlab = "")
 ```
 
-They do not look remotely similar, which, at first glance, suggests that the model is not able to reproduce the images. However, before we give up on this model, we use the CAE as a pre-training model for prediction of emission or not, to see what the performance is like in this regard. The code is given in the code chunk below, where the model is defined, compiled and fitted. The history after the fitting is plotted. 
+They do not look similar, which suggests that the model is not able to reproduce the images. Is it useless? Before we give up on this model, we use the CAE as a pre-training model for prediction of emission or not, to see what the performance is like in this regard. The code is given in the code chunk below, where the model is defined, compiled and fitted. The history after the fitting is plotted. 
 
 ```{r pretrainCAE}
 # First we build the encoder again, using the encoder we fit earlier. 
@@ -766,7 +710,7 @@ y_pred.CAE <- as.array(y_pred.CAE)
 confusionMatrix(as.factor(test.image_array_gen$classes), as.factor(y_pred.CAE))
 ```
 
-We can see that the performance of this model is worse than the CNN, which had a classification accuracy of around $60\%-70\%$. In general, this is not very good performance from a classifier, which might be because of a small amount of data and/or badly tuned hyperparameters in the models. The architectures might be lacking as well. For this pre-trained CAE, with 10 nodes in the bottleneck layer, I imagine that there are not enough nodes for this philosophy to be effective. I tried increasing the number of nodes in the trainable fully connected layer - this seemed to deteriorate the performance. I also tried using a pre-trained CNN without the dense layer in the encoder, i.e. with the final `max_pooling2d` layer of dimension `(None, 10, 10, 16)`, which gave a similar accuracy to the CNN. Thus, it seems to me, like we give up too much information in the images when reducing their dimension simply to 10 nodes, if prediction is the ultimate goal. I imagine that the goal here is more about demonstrating what happens in the bottleneck layer, which of couse is easier when the dimension is lower. Some representations of this will be shown next. 
+We can see that the performance of this model is worse than the CNN, when it comes to accuracy. Similar comments about the other metrics can be done here as well, but will be skipped (the reader is referred to the discussion after prediction with the CNN). In general, this is not very good performance from a classifier, which might be because of a small amount of data and/or badly tuned hyperparameters in the models. The architectures might be lacking as well. For this pre-trained CAE, with 10 nodes in the bottleneck layer, I imagine that there are not enough nodes for this philosophy to be effective. I tried increasing the number of nodes in the trainable fully connected layer further - this seemed to deteriorate the performance. I also tried using a pre-trained CNN without the final dense layer in the encoder, i.e. with the final `max_pooling2d` layer of dimension `(None, 10, 10, 16)`, as final output layer, which gave a more similar accuracy to the CNN. Thus, it seems to me like we give up too much information in the images when reducing their dimension simply to 10 nodes, if prediction is the ultimate goal. I imagine that the goal here is more about demonstrating what happens in the bottleneck layer, which of course is easier when the dimension is lower. Some representations of this will be shown next. 
 
 # Graphical Representation of Results from CAE
 
@@ -816,10 +760,10 @@ dim(enc_output)
 <!-- We cannot really learn anything from this, but it may still be interesting to see what the bottleneck activations look like.  -->
 
 ```{r}
-heatmap(enc_output) # Interpret this heatmap!!
+heatmap(enc_output) 
 ```
 
-The heatmap signals that the 10 nodes in the bottleneck have not been able to separate between the images, displayed row-wise on the right side of the heatmap. 
+The heatmap signals that the 10 nodes in the bottleneck have not been able to separate between the images, displayed row-wise on the right side of the heatmap. There is no clear difference in color in any of the columns, comparing different image numbers, meaning that it does not look like the nodes are able to represent any patterns, i.e. any split between the two types of images. We investigate this further. 
 
 The first method we use with the intention of understanding what is going on in the bottleneck, is Hierarchical Clustering. We cluster the predictions below. 
 
@@ -846,7 +790,7 @@ If the model has been able to generalize the data, there should be about half an
 count(df %>% filter(true != (cluster-1)))
 ```
 
-We can see that a large amount of the data set - over half! Let us investigate how many of each of the true labels are clustered in each of the two clusters. 
+We can see that a large amount of the data set - over half! This might be because of a reversed order of naming the clusters, but the number is still large. Let us investigate how many of each of the true labels are clustered in each of the two clusters. 
 
 ```{r}
 table(df %>% select(c(true, cluster)))
@@ -866,13 +810,13 @@ df$kmcluster <- km$cluster
 count(df %>% filter(true != (kmcluster-1)))
 ```
 
-The amount of wrongly clustered images is slightly lower compared with hierarchical clustering. We check how many clusters are unequal between the two methods. 
+The amount of wrongly clustered images is slightly lower compared with hierarchical clustering (given that the naming convention is the same in the two methods). We check how many clusters are unequal between the two methods. 
 
 ```{r}
 count(df %>% filter(kmcluster == cluster))
 ```
 
-We can see that some of the assigned clusters are different, meaning that the two methods do not fully agree (given that they have labeled the clusters in the similar "direction"). This is something to keep in mind when using all these methods, because they influence the conclusions we make about what the bottleneck in the CAE has done, which is our main objective here. How does the clustering look compared to the true labels for K-means clustering?
+We can see that most of the assigned clusters are different, meaning that the two methods do not agree (given that they have labeled the clusters in the similar "direction". We will see in the plots later that the two clustering methods have probably just flipped the order in which the clusters are given their names, since they look very similar there). The fact that these auxiliary methods do not always agree is something to keep in mind, because they influence the conclusions we make about what the bottleneck in the CAE has done, which is our main objective here. How does the clustering look compared to the true labels for K-means clustering?
 
 ```{r}
 table(df %>% select(c(true, kmcluster)))
@@ -893,9 +837,9 @@ We can see that the first principal component seems to capture almost all the va
 biplot(pca)
 ```
 
-From the biplot we can see that most nodes have negative loadings in the first component, while the second component almost does not differentiate between them. No clear clustering tendencies in the scores. 
+From the biplot we can see that most nodes have large loadings in the first component, while the second component almost does not differentiate between them. No clear clustering tendencies in the scores. 
 
-We plot the first components, coloring in the labels of the type of image (normal or effusion). 
+We plot the first component scores, coloring in the labels of the type of image (normal or effusion) and the clusters of each score. 
 
 ```{r}
 df.plotting <- data.frame(Comp1 = pca$scores[,1], Comp2 = pca$scores[,2], label = factor(df$true), 
@@ -917,7 +861,7 @@ df.final.plot %>% ggplot(aes(x = Comp1, y = Comp2)) +
 #    ggtitle("First Two Components from PCA Colored by Cluster")
 ```
 
-This plot is very illustrative. We can see that the clusters are clearly separable in the two first principal components, while the true labels are not at all. Thus, it seems like the method of PCA, which is a linear dimensionality reduction method, cannot capture non-linear relationships in the bottleneck. It is unsure if this is non-separability of the true images following the predictions using the encoder is a result of the encoder itself, i.e. the bottleneck not being able to differentiate between them, or if it is a drawback of PCA. Therefore, we try a non linear dimensionality reduction technique as well. There exist many different such methods, for example ISOMAP, Kernel PCA, Local MDS and t-SNE. 
+This plot is very illustrative. We can see that the clusters are clearly separable in the two first principal components, while the true labels are not at all. Thus, it seems like the method of PCA, which is a linear dimensionality reduction method, cannot capture non-linear relationships in the bottleneck. It is unsure if this observed non-separability of the true images following the predictions using the encoder is a result of the encoder itself, i.e. the bottleneck not being able to differentiate between them, or if it is a drawback of PCA. Therefore, we try a non-linear dimensionality reduction technique as well. There exists many different such methods, for example ISOMAP, Kernel PCA, Local MDS and t-SNE. 
 
 Our non-linear dimensionality reduction method of choice is t-SNE. We use it to reduce to two dimensions, which might be very strict. The results from the algorithm are plotted below. Notice that the hyperparameter `perplexity` needs to be set for this algorithm, which is set somewhat arbitrarily or heuristically in this case. 
 
@@ -938,8 +882,8 @@ df.final.plot2 %>% ggplot(aes(x = Comp1, y = Comp2)) +
    facet_grid(~type)
 ```
 
-Also for this method, we can see that we cannot separate between the normal and the effusion X-ray images in two dimensions. I am inclined to conclude that the CAE is not able to represent the two different images to a sufficient accuracy with only 10 nodes in the bottleneck, as briefly discussed earlier when trying to use the CAE as a pre-training model. 
+Also for this method, we can see that we cannot separate between the normal and the effusion X-ray images in two dimensions. I am inclined to conclude that the CAE is not able to represent the two different types of images to a sufficient accuracy with only 10 nodes in the bottleneck, as briefly discussed earlier when trying to use the CAE as a pre-training model. Thus, it seems to me like the model does a poor job at differentiating between normal images and X-ray images with effusion in the bottleneck. 
 
 # Final Remarks and Further Work
 
-As we have seen, neither of the models employed do a very good job in separating between normal X-ray images and the images with effusion. Because of shortage of time close to the end of the spring semester, it was not possible to keep improving these models. I have already tried to combat overfitting problems (especially in the CNN) by using data augmentation in the image generators, adding dropout and L2 kernel regularization. This is something I would have liked to do to a greater extent before delivering this report, but perhaps it can be done after. Notice also that we do not have a lot of data, which for sure is a reason to why the models do not yield greater performance. Lastly, I think the CAE suffers from the restriction of having 10 nodes in the bottleneck, as I found better performance when leaving convolutional layers in the bottleneck, but I understand that the purpose here is to analyze a bit more what happens in the bottleneck, which is easier with fewer nodes. 
+As we have seen, neither of the models employed do an impressingly good job in separating between normal X-ray images and images with effusion. Because of shortage of time close to the end of the spring semester, it was not possible to keep improving these models. I have already tried to combat overfitting problems (especially in the CNN) by using data augmentation in the image generators, adding dropout and L2 kernel regularization. This is something I would have liked to do to a greater extent before delivering this report, but perhaps it can be done after. Notice also that we do not have a lot of data, which for sure is a reason to why the models do not yield greater performance. Lastly, I think the CAE suffers from the restriction of having 10 nodes in the bottleneck, as I found better performance when having convolutional layers in the bottleneck, but I understand that the purpose here is to analyze a bit more what happens in the bottleneck, which is easier with fewer nodes. 

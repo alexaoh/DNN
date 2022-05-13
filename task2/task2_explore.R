@@ -17,8 +17,7 @@ FLAGS <- flags(
 new.model <- load_model_hdf5("convnet.h5")
 
 # Redo the Image Data Generator definitions. 
-img_width <- 128 
-img_height <- 128
+img_width <- img_height <- 128
 target_size <- c(img_width, img_height)
 batch_size <- FLAGS$batch_size # Set the batch size to the given flag.
 epochs <- 30
@@ -31,8 +30,8 @@ train_data_gen <- image_data_generator(
   validation_split = 1/5,
   # ,rotation_range = 40, # Not relevant for us. 
   # Images will almost always be relatively straight. 
-  width_shift_range = 0.2, # Shift in x direction. 
-  height_shift_range = 0.2, # Shift in y direction. 
+  width_shift_range = 0.1, # Shift in x direction. 
+  height_shift_range = 0.1, # Shift in y direction. 
   # shear_range = 0.2, # I do not want to use shearing either, 
   # as it seems a bit irrelevant for our type of images. 
   zoom_range = 0.2,
@@ -41,7 +40,7 @@ train_data_gen <- image_data_generator(
   # since the rest of the fill-modes seem to distort the images 
   # in a very unnatural way. Therefore I think it is better to 
   # simply set the points outside the boundaries of the input to 0. 
-  brightness_range = c(0.5, 1.5) # Play with the brightness. 
+  brightness_range = c(0.7, 1.3) # Play with the brightness. 
 )
 
 # We do not apply the data-augmentation (except from rescaling)
@@ -90,6 +89,13 @@ valid_samples <- val.image_array_gen$n
 # number of testing samples
 test_samples <- test.image_array_gen$n
 
+cb <- callback_reduce_lr_on_plateau( # Reduce learning rate if val_loss plateaus. 
+  monitor="val_accuracy",
+  factor = 0.5,
+  patience = 2, 
+  min_lr = 10e-8, 
+  mode = "max")
+
 # Refit the model with the new batch_size
 history <- new.model %>% fit( 
   train.image_array_gen,
@@ -100,6 +106,8 @@ history <- new.model %>% fit(
   # validation data
   validation_data = val.image_array_gen,
   validation_steps = as.integer(valid_samples / batch_size),
+  
+  callbacks = cb
 )
 plot(history)
 
