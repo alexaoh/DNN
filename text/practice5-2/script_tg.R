@@ -11,10 +11,7 @@ library(stringr)
 library(purrr)
 library(tokenizers)
 
-
-
 maxlen <- 40
-
 
 
 # Retrieve text
@@ -159,7 +156,3 @@ model %>% fit(
   epochs = 40,
   callbacks = print_callback
 )
-
-
-
-
