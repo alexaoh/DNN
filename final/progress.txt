@@ -1,0 +1,23 @@
+In this file I describe the progress I am making, such that it can easily be pasted into a report after working for a little while. 
+
+PART 1 - Making the CNN
+
+I downloaded the Kaggle dataset. Via the zip file I manually extracted the first 50 folders of train and test images (different types of birds), and saved the folders in a directory called "train" and "test" respectively. I checked that all the bird types were equal in both the directories, which seemed correct. Thus, we have our two datasets necessary to continue with the project.
+
+After having the data ready, we read all bird names into R by listing the subfolder names of the train directory. Moreover, we check that the subfolder names are the same when reading from train and test directories, just to double check that we have selected the same folders from the Kaggle download. This is true. We save the label names to disk for convenience. 
+
+Next we define the image width and height, defining the target size of the images. We also define the number of color channels, which is 3 in this case, since the images are RGB.
+
+In order to work efficiently with the images, we use image data generators from Keras. In these we also define the preprocessing of the images and make a validation split from the test data. We simply rescale the images to have pixel values within [0,1] and set the validation split to 0.2. We do not apply any further image augmentation techniques. Then we use the flow_images_from_directory() function to automatically import batches of images. We do this for all three data sets - training, validation and testing. 
+
+We use a CNN to classify the images. Instead of defining our own model, we load a pretrained model to quickly get acceptable baseline results. In this case we load the xception network with the weights pre-trained on the ImageNet dataset. We freeze all weights in this pre-trained model, but couple it with another convolutional layer, which has weights that will be trained by us on our specific problem.    
+
+We train the model for the first time and save the entire model image. This way the fully trained model can be loaded later, if we want to. We evaluate the model on the test data, in order to see how well it has performed. Then we predict on another image, which has not been used in training, taken from the directory "images to test", which came alongside the images downloaded from Kaggle. An overview of the model's predictions is made. 
+
+After this we have a look at which birds are well identified up against the birds that are not well identified LES OM DETTE I GUIDEN!!!
+
+We want to improve the performance of the model by tuning some of the hyperparameters. In the guide he used a brute force, self-made approach. I will use tfruns, which is very similar, but seems slightly more sofisticated compared to his approach. 
+
+PART 2 - Making the Shiny app
+
+Copy the final model we trained into the "www" subdirectory of the "birdapp" directory. We also copy the label list, i.e. the list of birds, into the subdirectory. 
