@@ -1,0 +1,4 @@
+scp
+scp -r send_markov/  alexaoh@markov.math.ntnu.no:
+scp alexaoh@markov.math.ntnu.no:~/<insert_filename> .
+~ 
