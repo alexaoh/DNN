@@ -1,26 +1,13 @@
-# NO NEED TO DELIVER THIS, AS IT IS THE SAME CODE AS IN model.R
-# USED THIS ON MARKOV.
+# Final Project - Hyperparameter Tuning. 
 
-#install.packages("tidyverse")
-library(tidyverse)
-#install.packages("keras")
-library(keras)
-#install.packages("tensorflow")
-library(tensorflow)
-#install.packages("reticulate")
-library(reticulate)
+############## Hyperparameter Flags
+FLAGS <- flags(
+  flag_numeric("learning_rate", 0.001), # Set default lr. 
+  flag_numeric("dropout_rate", 0.2), # Set default dropout rate. 
+  flag_integer("n_dense", 1024) # Set default dropout rate. 
+)
 
-#install_tensorflow(extra_packages="pillow")
-#install_keras()
-#tf$debugging$set_log_device_placement(TRUE)
-# 
-# # As stated in the tutorial: 
-# # https://forloopsandpiepkicks.wordpress.com/2021/03/16/how-to-build-your-own-image-recognition-app-with-r-part-1/
-# # we use the dataset of birds from Kaggle: https://www.kaggle.com/datasets/gpiosenka/100-bird-species?resource=download
-# # I extracted the first 50 types of birds from both the training and the test data downloaded. 
-# 
-#setwd("/home/ajo/gitRepos/DNN/final")
-
+# Load the data and build the model, exactly the same as in "model.R"
 global.seed <- 2022 # Use this as the seed everywhere. 
 set.seed(global.seed)
 path.train <- "train/"
@@ -29,7 +16,7 @@ label.list <- dir(path.train)
 output.n <- length(label.list) # as we can see, we have 50 different birds in train images.
 #length(dir(path.test)) # The same is the case for the testing images, as seen below.
 #all(label.list == dir(path.test))
-save(label.list, file="label_list.RData") # Save the list of names on disk for later.
+#save(label.list, file="label_list.RData") # Save the list of names on disk for later.
 
 width <- height <- 224 # This is the original size of the images.
 target.size <- c(width, height)
@@ -114,11 +101,12 @@ model.function <- function(learning_rate = 0.001,
   return(model)
 }
 # 
-model <- model.function()
+model <- model.function(learning_rate = FLAGS$learning_rate, 
+                        dropoutrate = FLAGS$dropout_rate, 
+                        n_dense = FLAGS$n_dense)
 #summary(model)
-# 
+
 # We train the model.
-# This training is left for the larger computer, via ssh.
 hist <- model %>% fit(
   train.images,
   steps_per_epoch = train.images$n %/% batch_size,# Integer division.
@@ -127,5 +115,7 @@ hist <- model %>% fit(
   validation_steps = validation.images$n %/% batch_size # Integer division.
 )
 
-# We save the model after fitting, since it took a little while!
-model %>% save_model_hdf5("finetunedXception1.h5")
+
+cat("The learning rate was ", FLAGS$learning_rate)
+cat("The dropout rate was ", FLAGS$dropput_rate)
+cat("The n_dense was ", FLAGS$n_dense)

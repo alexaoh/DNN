@@ -8,7 +8,7 @@ library(keras)
 library(tensorflow)
 library(tidyverse)
 
-mod <- load_model_hdf5("www/birdapp_final.h5")
+mod <- load_model_hdf5("www/finetunedXception1.h5")
 
 load("www/label_list.RData")
 target.size <- c(224,224,3)
@@ -64,7 +64,7 @@ ui <- dashboardPage(
 # We create the server object. 
 server <- function(input, output) {
   
-  image <- reactive({image_load(input$input_image$datapath, target_size = target_size[1:2])})
+  image <- reactive({image_load(input$input_image$datapath, target_size = target.size[1:2])})
   
   
   prediction <- reactive({
@@ -72,8 +72,8 @@ server <- function(input, output) {
     x <- image_to_array(image())
     x <- array_reshape(x, c(1, dim(x)))
     x <- x/255
-    pred <- model %>% predict(x)
-    pred <- data.frame("Bird" = label_list, "Prediction" = t(pred))
+    pred <- mod %>% predict(x)
+    pred <- data.frame("Bird" = label.list, "Prediction" = t(pred))
     pred <- pred[order(pred$Prediction, decreasing=T),][1:5,]
     pred$Prediction <- sprintf("%.2f %%", 100*pred$Prediction)
     pred
@@ -86,7 +86,7 @@ server <- function(input, output) {
   output$warntext <- renderText({
     req(input$input_image)
     
-    if(as.numeric(substr(prediction()[1,2],1,4)) >= 30){return(NULL)}
+    if(as.numeric(substr(prediction()[1,2],1,4)) >= 45){return(NULL)}
     warntext <- "Warning: I am not sure about this bird!"
     warntext
   })
@@ -103,3 +103,5 @@ server <- function(input, output) {
   }, deleteFile = TRUE)
   
 }
+
+shinyApp(ui, server)
