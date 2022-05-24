@@ -8,8 +8,10 @@ library(keras)
 library(tensorflow)
 library(tidyverse)
 
-mod <- load_model_hdf5("www/finetunedXception1.h5")
-
+# Could make a button in the app to switch between the two models!
+# Could be interesting to do this, for fun!
+#mod <- load_model_hdf5("www/finetunedXception1.h5")
+mod <- load_model_hdf5("www/tunedHypParamXception.h5")
 load("www/label_list.RData")
 target.size <- c(224,224,3)
 options(scipen=999) #prevent scientific number formatting

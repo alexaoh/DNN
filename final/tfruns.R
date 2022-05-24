@@ -2,12 +2,12 @@
 # Hyperparameter Tuning 
 # Explore learning rate, dropout rate and number of nodes in the final dense hidden layer. 
 
-# library(tidyverse)
-# library(keras)
-# library(tensorflow)
-# library(reticulate)
-# library(tfruns)
-# 
+library(tidyverse)
+library(keras)
+library(tensorflow)
+library(reticulate)
+library(tfruns)
+# # This code was run on Markov!
 # tune_grid <- data.frame("learning_rate" = c(0.001,0.0001),
 #                         "dropoutrate" = c(0.3,0.2),
 #                         "n_dense" = c(1024,256))
@@ -31,8 +31,14 @@
 # write.csv(performance.table,"performance_table.csv")
 
 performance.table <- read.csv("performance_table.csv")
-# Print the units of each of the runs in the performance table. 
-#performance.table$flag_ ...
 
-# Compare the two runs with the highest metric accuracy!
-#compare_runs(c(performance.table[1,1], performance.table[2,1]))
+# Compare the two runs with the highest validation accuracy.
+compare_runs(c(performance.table[1,2], performance.table[2,2]))
+performance.table$metric_val_accuracy[1:2]
+performance.table$flag_dropout_rate[1:2]
+performance.table$flag_learning_rate[1:2]
+performance.table$flag_n_dense[1:2]
+# It is apparent that the model with the best validation accuracy has
+# dropout rate 0.2, learning rate 1e-04 and n_dense 1024. 
+# We train this model again on Markov and use this as the final model. 
+
