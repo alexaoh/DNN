@@ -4,13 +4,13 @@ subtitle: "Statistical Learning with Deep Artificial Neural Networks"
 author: "Alexander J Ohrt"
 date: "`r format(Sys.time(), '%d. %b. %Y')`"
 output: 
-  # html_document:
-  #   code_folding: show
-  #   toc: true
-  #   toc_depth: 3
-  #   theme: readable
-  #   highlight: textmate
-  #   number_sections: true
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    theme: readable
+    highlight: textmate
+    number_sections: false
   pdf_document:
     fig_caption: true
     number_sections: false
@@ -28,8 +28,8 @@ linkcolor: black
 
 ```{r setup, include=FALSE}
 rm(list = ls())
-knitr::opts_chunk$set(echo = F, warning = F, comment = "#>", size = "scriptsize")
-setwd("/home/ajo/gitRepos/DNN/final")
+knitr::opts_chunk$set(echo = T, warning = F, comment = "#>", size = "scriptsize")
+#setwd("/home/ajo/gitRepos/DNN/final")
 library(tidyverse)
 library(keras)
 library(tensorflow)
@@ -39,21 +39,29 @@ library(tfruns)
 
 # Introduction 
 
-In this final project we will build an image recognition application using R. The work is heavily influenced by the two blog posts (Blog post [one](https://forloopsandpiepkicks.wordpress.com/2021/03/16/how-to-build-your-own-image-recognition-app-with-r-part-1/) and Blog post [two](https://forloopsandpiepkicks.wordpress.com/2021/03/30/how-to-build-your-own-image-recognition-app-with-r-part-2/)). The user of the web-based application will be able to upload a photo and receive predictions on what is shown in the photo, based on a machine learning model. In this case, the model is trained on 50 different bird species, which means that this app can be used to predict birds among these species. If any other file is uploaded, the application will give strange results. Notice that if the model makes predictions with a certainty probability of under 45\%, it outputs a warning to the user. 
+In this final project we will build an image recognition application using R. The work is heavily influenced by two blog posts from the blog $\textit{For-loops and piep kicks}$ (Blog post [one](https://forloopsandpiepkicks.wordpress.com/2021/03/16/how-to-build-your-own-image-recognition-app-with-r-part-1/) and Blog post [two](https://forloopsandpiepkicks.wordpress.com/2021/03/30/how-to-build-your-own-image-recognition-app-with-r-part-2/)). The user of the web-based application will be able to upload a photo and receive predictions on what is shown in the photo, based on a machine learning model. In this case, the model is trained on 50 different bird species, which means that this app can be used to predict birds among these species. If any other file is uploaded, the application will give strange results. Notice that if the model makes a prediction with certainty probability of under 45\%, it outputs a warning to the user. 
 
-The machine learning model used in this case is a convolutional deep neural network. Models of this sort are leading in the areas of image recognition and image classification. We use a pre-trained model, with a demonstrated performance on ImageNet. We load the Xception network, with weights pre-trained on the ImageNet dataset. This network is used as a baseline model and we add a final hidden layer, which will be fine-tuned on our dataset. In this way we can use **transfer learning** to make a classification model - we use the pre-trained weights of the Xception network, which, even though they are not trained our dataset, they can probably be used to extract relevant features from our data. Then, the model is fine-tuned to our data, in order to increase the performance of the model. 
+The machine learning (ML) model used in this case is a convolutional deep neural network (CNN). Models of this sort are leading in the areas of image recognition and image classification. We use a pre-trained model, with a demonstrated performance on [ImageNet](https://www.image-net.org/). More specifically, we load the Xception network, with weights pre-trained on the ImageNet dataset. This network is used as a baseline model and we add a final hidden layer, which will be fine-tuned on our dataset. In this way we can use **transfer learning** to make a classification model - we use the pre-trained Xception network, which, even though it is not trained in our specific dataset, will probably be able to extract some relevant features from our data. The fine-tuning of our model is done by freezing the weights of the Xception network, meaning that they will not be changed when training, and optimizing (at best) the weights to the final hidden layer and to the output layer. 
 
 # Part 1 - Implementing a CNN
 
+## Downloading Data
+
+The first and most critical step in the process is gathering data for training, validating and testing the ML model. In this case, since we will work with bird species, we download the dataset containing 400 bird species from [Kaggle](https://www.kaggle.com/datasets/gpiosenka/100-bird-species). This is a very high quality dataset where there is only one bird in each image and the bird typically takes up at least 50% of the pixels in the image. From the zip file, we extract the first 50 folders of train and test images, which correspond to 50 different species of birds. We save the folders in a directory called "train" and "test" respectively. I did this manually using the GUI on my computer, as I found that to be the simplest procedure. Notice that the specific data I have used is available in the parent directory of this report. If you would like to, you can use a larger or smaller amount of species or sample the species randomly instead of simply choosing the first 50. Next, we check that all the bird species are equal in both the directories, to be sure that we don't generate any problems from the get-go. This is done using code that is shown further below. Thus, we have our two (high-quality) datasets and are able to begin working with some models. 
+
 ## Setting Parameters and Importing Images
+
+After having the data ready, we read all bird names into R by listing the subfolder names of the train directory. Moreover, we check that the subfolder names are the same when reading from the train and test directories, which is our check that the same 50 species are correctly selected from the downloaded zip file. In our case, this is true. We save the label names to disk for convenience, since these names will be used when building the web-app later. 
+
+Next we define the image width and height, defining the target size of the images. We also define the number of color channels, which is 3 in this case, since the images are RGB. Moreover, we define the batch size adn the epochs, which will be used during the fitting of the model.
 
 ```{r}
 global.seed <- 2022 # Use this as the seed everywhere. 
 set.seed(global.seed)
 path.train <- "train/"
 path.test <- "test/"
-label.list <- dir(path.train)
-output.n <- length(label.list) # as we can see, we have 50 different birds in train images.
+label.list <- dir(path.train) # List the bird species names in the train folder. 
+output.n <- length(label.list) # As we can see, we have 50 different birds in train images.
 length(dir(path.test)) # The same is the case for the testing images, as seen below.
 all(label.list == dir(path.test))
 save(label.list, file="label_list.RData") # Save the list of names on disk for later.
@@ -62,11 +70,15 @@ width <- height <- 224 # This is the original size of the images.
 target.size <- c(width, height)
 rgb <- 3 # Color channels.
 
-# Set bath size and number of epochs for training later. 
+# Set batch size and number of epochs for training later. 
 batch_size <- 32
 epochs <- 6
- 
-# # Make generator for training and validation data. 
+```
+
+In order to work efficiently with the images, we use image data generators from Keras. In these generators we also define the preprocessing of the images and make a validation split from the training data. We simply rescale the images to have pixel values within [0,1] and set the validation split to 0.2. We do not apply any further image augmentation techniques. Then we use the `flow_images_from_directory()` function to automatically import batches of images. We do this for all three data sets - training, validation and testing. 
+
+```{r}
+# Make generator for training and validation data. 
 train.data.gen <- image_data_generator(rescale = 1/255,
                                        validation_split = 0.2)
 
@@ -104,7 +116,11 @@ test.images <- flow_images_from_directory(path.test,
                                           seed = global.seed, 
                                           batch_size = 1) # Set batch size to 1 in order to
                                                           # test on one image at a time. 
+```
 
+In order to get an idea of what the data looks like, we create some tables of all the classes and their contents for all three data sets. Moreover, we plot an arbitrary image from the training data set. 
+
+```{r}
 # Get an idea of our data.
 table(train.images$classes)
 table(validation.images$classes)
@@ -114,24 +130,20 @@ table(test.images$classes)
 plot(as.raster(train.images[[1]][[1]][17,,,]))
 ```
 
-I downloaded the Kaggle dataset. Via the zip file I manually extracted the first 50 folders of train and test images (different types of birds), and saved the folders in a directory called "train" and "test" respectively. I checked that all the bird types were equal in both the directories, which seemed correct. Thus, we have our two datasets necessary to continue with the project.
-
-After having the data ready, we read all bird names into R by listing the subfolder names of the train directory. Moreover, we check that the subfolder names are the same when reading from train and test directories, just to double check that we have selected the same folders from the Kaggle download. This is true. We save the label names to disk for convenience. 
-
-Next we define the image width and height, defining the target size of the images. We also define the number of color channels, which is 3 in this case, since the images are RGB. Moreover, we define the batch size which will be used during the fitting and the epochs. 
-
-In order to work efficiently with the images, we use image data generators from Keras. In these we also define the preprocessing of the images and make a validation split from the test data. We simply rescale the images to have pixel values within [0,1] and set the validation split to 0.2. We do not apply any further image augmentation techniques. Then we use the flow_images_from_directory() function to automatically import batches of images. We do this for all three data sets - training, validation and testing. 
+We can see that all bird species have 5 testing images. Moreover, notice that the number of images per species differ significantly between some of the species in the two other datasets, ranging from `r min(table(train.images$classes))` to `r max(table(train.images$classes))` in the training data and from `r min(table(validation.images$classes))` to `r max(table(validation.images$classes))` in the validation data. This can be worth taking into account when considering classification performance. 
 
 ## Define and Train First Model
 
+As noted, we decide to use a CNN to classify the images. We load the pretrained Xception network in order to (hopefully) quickly get acceptable baseline results. We freeze all weights in this pre-trained model, but couple it with another fully connected dense layer, which has weights that will be trained on our specific problem. In addition, we add a layer of average pooling and some dropout to prevent overfitting. Notice that the number of nodes in the fully connected dense layer, the learning rate and the dropout rate are set to somewhat arbitrary values at this moment, as they will be tuned later. 
+
 ```{r}
-# # We use a pretrained model to get good results off the bat. 
+# We use the pretrained model to get good results off the bat. 
 mod.base <- application_xception(weights = 'imagenet', 
                                   include_top = FALSE, input_shape = c(width, height, 3))
-summary(mod.base)
+#summary(mod.base)
 freeze_weights(mod.base)
-summary(mod.base) # Freeze the weights of the pretrained xception model. 
-# 
+#summary(mod.base) # Freeze the weights of the pretrained xception model. 
+
 model.function <- function(learning_rate = 0.001, 
                            dropoutrate=0.2, n_dense=1024){
   # Function to add layers to the pre-trained model. This is finetuned.
@@ -154,7 +166,7 @@ model.function <- function(learning_rate = 0.001,
 }
 # 
 model <- model.function()
-summary(model)
+#summary(model)
 # 
 # # We train the model. 
 # # This training is left for the larger computer, via ssh. 
@@ -170,11 +182,11 @@ summary(model)
 # model %>% save_model_hdf5("finetunedXception1.h5")
 ```
 
-We use a CNN to classify the images. Instead of defining our own model, we load a pretrained model to quickly get acceptable baseline results. In this case we load the xception network with the weights pre-trained on the ImageNet dataset. We freeze all weights in this pre-trained model, but couple it with another convolutional layer, which has weights that will be trained by us on our specific problem.    
-
-We train the model for the first time and save the entire model image. Notice that I was not able to install the tensorflow backend onto my NVIDIA GPU, which meant that the training process was very slow. Thus, instead of training it on my computer, effectively disabilitating it for a few hours, I trained the models on a large computer located at my home university, via ssh. On this computer the process is parallelized, meaning that it is trained faster. Moreover, since I was using tmux, which is a terminal multiplexer, I was able to detach the session and log out of the computer without the computations stopping. The reason I saved the entire model image was so that I could copy it to my computer (via scp), load it into my file and make predictions. 
+We train this first model and save the entire model image, i.e. the model architecture, the weights and the state of the optimizer. Notice that I was not able to install the Tensorflow backend onto my NVIDIA GPU, which lead to a relatively slow training process (on the CPUs). Thus, instead of training it on my personal computer, I trained the models on a large computer located at my home university, via ssh. On this computer the training was performed in parallel on GPUs, meaning that it was trained much faster. Moreover, since I was using tmux, which is a terminal multiplexer, I was able to detach the session and log out of the computer without the computations stopping. The reason I saved the entire model image was so that I could copy it to my computer (via scp), load it into my file and make predictions. Train the model however you like, but, unless you have a large computer at home, I would recommend following a similar procedure as highlighted.  
 
 ## Evaluate First Model
+
+The model image is loaded and evaluated on the test data, in order to see how well it has performed. The accuracy reported is approximately 84%, which is not bad for the initial model. 
 
 ```{r}
 # Load the model fitted on the other computer. 
@@ -183,8 +195,12 @@ model <- load_model_hdf5("finetunedXception1.h5")
 # We evaluate our model on the test data. 
 model %>% evaluate(test.images, 
                              steps = test.images$n)
-# 84& accuracy with first model. 
+# 84% accuracy with first model. 
+```
 
+Next we predict on another image, which has not been used in training, taken from the Wikipedia page of Abbot's babbler, which is one of the bird species we have trained our model on. The image is cropped such that is has a 1:1 ratio between height and width. It is added to the parent folder of this report, such that the results are reproducible. 
+
+```{r}
 # Next we test with another image. The image is taken from the 
 # Wikipedia page on Abbot's babbler. 
 test.image <- image_load("abbotsBabbler.jpg", 
@@ -202,10 +218,16 @@ pred <- data.frame("Bird" = label.list, "Probability" = t(pred))
 pred <- pred[order(pred$Probability, decreasing=T),][1:5,] 
 # Change the probability to percentage.
 pred$Probability <- paste(format(100*pred$Probability,2),"%")
-pred 
-# We can see that the first model gives Abbot's babbler an 72% probability. 
+knitr::kable(pred, caption = "Predictions on Abbot's babbler from Initial Model")
+# 72% probability. 
 # This means that the model would have classified this test image correctly. 
+```
 
+We can see that the initial model gives Abbot's babbler a probability of approximately 72%. This means that, when using a classifier that classifies according to the largest probability, the model would have classified this bird correctly. Notice however that, the closer to 100% the probability of a class is, the larger certainty the model gives about the species it predicts. So far, not bad for a first model. 
+
+Next we have a look at which birds are well identified vs. the birds that are not well identified.
+
+```{r}
 # Next we have a look at which birds are well identified vs. 
 # which birds are not so well identified by the model. 
 
@@ -229,13 +251,9 @@ predictions$predicted_class <-
 predictions$true_class <- paste0("Class",test.images$classes)
 ```
 
-After loading the fitted model, we evaluate the model on the test data, in order to see how well it has performed. 84% for the first model is the accuracy given, which is not bad for the first model, before tuning the hyperparameters. Then we predict on another image, which has not been used in training, taken from the Wikipedia page of Abbot's babbler, which is one of the bird species we have trained our model on. An overview of the model's predictions is made, showing the top 5 most probable bird species according to the model. The model gives the majority of the probability density (approximately 72%) to Abbot's babbler, meaning that it classifies the bird correctly, with some certainty. So far, not bad for a first model. 
-
-After this we have a look at which birds are well identified up against the birds that are not well identified. We can see that over half of the species are 100% correctly classified by our model in our test data. However, there are a few species that are mostly misclassified or not classified correctly at all, for instance "Apapane", which is never classified correctly in our test set. 
-
 ```{r, fig.height=8}
 # Finally, we count the percentage of correct classifications 
-# (since each of our class has exactly 5 test images, 
+# (since each of our classes has exactly 5 test images, 
 # the values will be either 0, 20, 40, 60, 80 or 100%). 
 predictions %>% group_by(true_class) %>% 
   summarise(percentage_true = 100*sum(predicted_class == 
@@ -251,6 +269,8 @@ predictions %>% group_by(true_class) %>%
   ggtitle("Percentage correct classifications by bird species")
 ```
 
+We can see that over half of the species in the test data are 100% correctly classified by our model. However, there are a few species that are mostly misclassified or not classified correctly at all, for instance "Apapane", which is never classified correctly in our test set. We notice that the species "Apapane" is class number `r train.images$class_indices$APAPANE` and has `r table(train.images$classes)[train.images$class_indices$APAPANE+1]` images in the training set according to the table shown earlier. Thus, the especially bad performance on this species seems not to be because of few training images, as the number of training images for the species is larger than the median and mean amount per class. 
+
 ## Model Tuning
 
 ```{r}
@@ -260,9 +280,17 @@ predictions %>% group_by(true_class) %>%
 # the former calls on the latter for ever scenario and is used to compare runs in the end. 
 ```
 
-We want to improve the performance of the model by tuning some of the hyperparameters. In the guide he used a brute force, self-made approach, using simple for-loops over the parameters he wanted to test. I will use tfruns, which is very similar, but seems slightly more sofisticated compared to his approach. This was also run on the computer located at my home university, naturally taking a longer time than the original computations, since a lot more models will be trained. We explore the same grid of hyperparameters as the author of the blog posts. 
+We want to improve the performance of the model by tuning some of the hyperparameters; we will tune the number of nodes in the fully connected dense layer, the learning rate and the dropout rate over discrete grids of values. In the blog post, the author used a brute force, self-made approach, using simple for-loops over the parameters he wanted to test. I will use tfruns, which is very similar, but seems slightly more sophisticated compared to his approach. Notice that I also ran the tfruns hyperparameter tuning on the computer located at my home university, naturally taking a longer time than the original computations, since a lot more models are trained. We explore the following grids of each of the hyperparameters
 
-The **runs** directory as well as the saved **performance_table** are copied from the remote computer to mine via scp after the tfruns hyperparameter tuning is done. The results from this tuning is shown. 
+```{r}
+knitr::kable(c(0.001,0.0001), caption = "Values of Learning Rate")
+knitr::kable(c(0.3,0.2), caption = "Values of Dropout Rate")
+knitr::kable(c(1024,256), caption = "Values of Number of Dense Nodes")
+```
+
+The hyperparameter tuning is performed using to external R files. The file "tfruns.R" calls on the file "finetuning.R" for every scenario om the grid of values and finally compares all the runs to each other. 
+
+The **runs** directory as well as the saved **performance_table** are copied from the remote computer to my local computer via scp after the tfruns hyperparameter tuning is done. The results from this tuning is shown below. 
 
 ```{r}
 # Read the performance table produced by the remote computer. 
@@ -277,7 +305,7 @@ df.tf <- cbind(performance.table$metric_val_accuracy,
                performance.table$flag_dropout_rate,
                performance.table$flag_learning_rate, 
                performance.table$flag_n_dense)
-colnames(df.tf) <- c("Validation accuracy", "Dropput rate", "Learning rate", "Dense nodes")
+colnames(df.tf) <- c("Validation accuracy", "Dropout rate", "Learning rate", "Dense nodes")
 knitr::kable(df.tf, caption = "Validation Accuracy and Hyperparameter Values of all Trained Models")
 # It is apparent that the model with the best validation accuracy has
 # dropout rate 0.2, learning rate 1e-04 and n_dense 1024. 
@@ -292,25 +320,22 @@ We can see that the best model according to the runs is the model fitted with hy
 
 We train the model with these hyperparameters on the remote computer and save it as the final model that will be used in the app. 
 
-# Part 2 - Implementing a Shiny App
-
-## Implementing the App Locally
-
-Copy the final model we trained into the "www" subdirectory of the "birdapp" directory. We also copy the label list, i.e. the list of birds, into the subdirectory. 
-
-First we define the ui object (User Interface). We use the dashboardPage function to create a dashboard page for the Shiny app. Inside the dashboardPage we define a dashboardHeader, a dashboardSidebar and a dashboardBody. Next we create the server object, which contains the interactive elements of the app. Inside the server function we load the image that is uploaded to the webapp by the user. Then we use the model we trained earlier to predict on the newly uploaded image. We create a dataframe with the top five predicted bird species after prediction, similar to what we did when testing the model earlier. Then we render it to the ui as a table, using the renderTable function. A warning text is defined, which display a warning to the visitor if the model has highest predicted probability below 45%. Finally we display the image that was loaded from the user and delete the file from memory.
-
 ## Evalution of New Model
+
+We evaluate the final model, to quantify the improvements when comparing to the initial model. 
 
 ```{r}
 # Load the model fitted on the other computer. 
-model <- load_model_hdf5("tunedHypParamXception.h5")
+mod <- load_model_hdf5("tunedHypParamXception.h5")
 
 # We evaluate our model on the test data. 
-model %>% evaluate(test.images, 
+mod %>% evaluate(test.images, 
                              steps = test.images$n)
-# 84& accuracy with first model. 
+```
 
+This model reports an accuracy of approximately 87%, which is slightly better than the initial model. Evaluation on the image of the Abbot's babbler is shown below. 
+
+```{r}
 # Next we test with another image. The image is taken from the 
 # Wikipedia page on Abbot's babbler. 
 test.image <- image_load("abbotsBabbler.jpg", 
@@ -321,22 +346,26 @@ x <- image_to_array(test.image)
 x <- array_reshape(x, c(1, dim(x))) # Reshape image to expected input dimensions by model. 
 x <- x/255 # Rescale pixel values. 
 plot(as.raster(x[1,,,])) # Plot the image. 
-pred <- model %>% predict(x) # Make predictions on image. 
+pred <- mod %>% predict(x) # Make predictions on image. 
 # Make dataframe of predictions, with names of the respective birds. 
 pred <- data.frame("Bird" = label.list, "Probability" = t(pred))
 # Order the probabilities decreasingly and only show the largest 5. 
 pred <- pred[order(pred$Probability, decreasing=T),][1:5,] 
 # Change the probability to percentage.
 pred$Probability <- paste(format(100*pred$Probability,2),"%")
-pred 
-# We can see that the first model gives Abbot's babbler an 72% probability. 
+knitr::kable(pred, caption = "Predictions on Abbot's babbler from New Model")
+# We can see that the first model gives Abbot's babbler an 65% probability. 
 # This means that the model would have classified this test image correctly. 
+```
 
+The correct species would still have been classified by this model, but it gives a smaller certainty than the initial model. Finally, we have a look at which birds are well identified vs. the birds that are not well identified. 
+
+```{r}
 # Next we have a look at which birds are well identified vs. 
 # which birds are not so well identified by the model. 
 
 # We predict on the testing images and save the predictions as a data frame. 
-predictions <- model %>% 
+predictions <- mod %>% 
   predict(
     test.images,
     steps = test.images$n
@@ -373,7 +402,137 @@ predictions %>% group_by(true_class) %>%
   ggtitle("Percentage correct classifications by bird species")
 ```
 
+In this case we can see that a large majority of the species are classified correctly in all testing cases. However, we still have some species that the model has trouble classifying. Notice that "Apapane" which was the worst performing bird in the first model, is classified 100% correctly in this model. Moreover, we notice that several of the worst performers are the same in both models, e.g. the "Antbird", the "Andean Siskin" and the "Altamira Yellowthroat" are among the least frequently correctly classified species in both models. Performing a similar rundown of the number of training images per species as earlier, we obtain that the "Altamira Yellowthroat" has `r table(train.images$classes)[train.images$class_indices$"ALTAMIRA YELLOWTHROAT" + 1]` images, the "Barn Swallow has `r table(train.images$classes)[train.images$class_indices$"BARN SWALLOW" + 1]`, the "Antbird" has `r table(train.images$classes)[train.images$class_indices$ANTBIRD + 1]` and "Andean Siskin" has `r table(train.images$classes)[train.images$class_indices$"ANDEAN SISKIN" + 1]`. In this case, the two first species are on the lower end of number of images in the training data, which might be a contributing factor to why the performance on them is bad. The two latter species are hovering around the median (`r median(table(train.images$classes))`) and mean (`r mean(table(train.images$classes))`) number of images. It could still be that they have too few images to train on for the "complexity" of the bird or perhaps the images for these species are slightly lower quality than the others. 
+
+# Part 2 - Implementing a Shiny App
+
+We implement the web app with Shiny. The first step is to make a directory called "birdapp", with a subdirectory called "www". Since we call the main directory of our app "birdapp" this will automatically be the name of the app when deploying to shinyapps.io, which will be done later. 
+
+## Implementing the App Locally
+
+The first step of the implementation is to copy the final model we trained into the "www" subdirectory of the "birdapp" directory. We also copy the label list, i.e. the list of birds, into the subdirectory. These files will be used in order to get the classifier runing in the application.  
+
+Next we implement the web application itself. This is done in an R file called "app.R" in the "birdapp" folder. First we define the ui object (User Interface). We use the dashboardPage function to create a dashboard page for the Shiny app. Inside the dashboardPage we define a dashboardHeader, a dashboardSidebar and a dashboardBody. Next we create the server object, which contains the interactive elements of the app. Inside the server function we load the image that is uploaded to the webapp by the user. Then we use the model we trained earlier to predict on the newly uploaded image. We create a dataframe with the top five predicted bird species after prediction, similar to what we did when testing the model earlier. Then we render it to the ui as a table, using the renderTable function. A warning text is defined, which displays a warning to the visitor if the model has highest predicted probability below 45%. Finally we display the image that was loaded from the user and delete the file from memory. All the code for the application is shown below. 
+
+```{r, eval = F}
+# Shiny app for Birdapp main file. 
+#setwd("/home/ajo/gitRepos/DNN/birdapp")
+
+library(shiny)
+library(shinydashboard)
+library(rsconnect)
+library(keras)
+library(tensorflow)
+library(tidyverse)
+
+# Could make a button in the app to switch between the two models!
+# Could be interesting to do this, for fun!
+
+#mod <- load_model_hdf5("www/finetunedXception1.h5") # This is the initial model. 
+mod <- load_model_hdf5("www/tunedHypParamXception.h5")
+load("www/label_list.RData")
+target.size <- c(224,224,3)
+options(scipen=999) # Prevent scientific number formatting.
+
+# Define the ui object. 
+ui <- dashboardPage(
+  skin = "black",
+  title = "BirdApp - Classify your Bird!",
+  
+  #(1) Header
+  
+  dashboardHeader(title=tags$h1("BirdApp - Classify your Bird!",
+                                style="font-size: 120%; font-weight: bold; color: black"),
+                  titleWidth = 350,
+                  tags$li(class = "dropdown"),
+                  dropdownMenu(type = "notifications", 
+                               icon = icon("question-circle", "fa-1x"), badgeStatus = NULL,
+                               headerText="",
+                               tags$li("Created by alexaoh, but"), 
+                               tags$li(a(href = "https://forloopsandpiepkicks.wordpress.com",
+                                         target = "_blank",
+                                         tagAppendAttributes(icon("exclamation-circle"), 
+                                                             class = "info"),
+                                         "(heavily) inspired by (click here)"))
+                               
+                  )),
+  
+  
+  #(2) Sidebar
+  
+  dashboardSidebar(
+    width=350,
+    fileInput("input_image","File" ,accept = c('.jpg','.jpeg')), 
+    tags$br(),
+    tags$p("Upload the image here (We only accept jpg and jpeg formats at this point).")
+  ),
+  
+  
+  #(3) Body
+  
+  dashboardBody(
+    
+    h4("Instruction:"),
+    tags$br(),tags$p("1. Take a picture of a bird."),
+    tags$p("2. Crop image so that bird fills out most of the image."),
+    tags$p("3. Upload image with menu on the left."),
+    tags$br(),
+    
+    fluidRow(
+      column(h4("Image:"),imageOutput("output_image"), width=6),
+      column(h4("Result:"),tags$br(),textOutput("warntext",), tags$br(),
+             tags$p("This bird is probably a:"),tableOutput("text"),width=6)
+    ),tags$br()
+    
+  ))
+
+
+# We create the server object. 
+server <- function(input, output) {
+  
+  image <- reactive({image_load(input$input_image$datapath, target_size = target.size[1:2])})
+  
+  prediction <- reactive({
+    if(is.null(input$input_image)){return(NULL)}
+    x <- image_to_array(image())
+    x <- array_reshape(x, c(1, dim(x)))
+    x <- x/255
+    pred <- mod %>% predict(x)
+    pred <- data.frame("Bird" = label.list, "Prediction" = t(pred))
+    pred <- pred[order(pred$Prediction, decreasing=T),][1:5,]
+    pred$Prediction <- sprintf("%.2f %%", 100*pred$Prediction)
+    pred
+  })
+  
+  output$text <- renderTable({
+    prediction()
+  })
+  
+  output$warntext <- renderText({
+    req(input$input_image)
+    
+    if(as.numeric(substr(prediction()[1,2],1,4)) >= 45){return(NULL)}
+    warntext <- "Warning: I am not sure about this bird!"
+    warntext
+  })
+  
+  
+  output$output_image <- renderImage({
+    req(input$input_image)
+    
+    outfile <- input$input_image$datapath
+    contentType <- input$input_image$type
+    list(src = outfile,
+         contentType=contentType,
+         width = 400)
+  }, deleteFile = TRUE)
+  
+}
+
+shinyApp(ui, server)
+#rsconnect::deployApp() # Deploy to shinyapps after following instructions. 
+```
 
 ## Deployment
 
-We make a user on [shinyapps.io](https://www.shinyapps.io/) and deploy the app there. DEPLOY AGAIN AFTER I AM DONE CHANING THE APP A BIT! Visit the app [here](https://alexaoh.shinyapps.io/birdapp/).
+We make a user on [shinyapps.io](https://www.shinyapps.io/) and deploy the app there. The instructions are very clearly stated on the website after making the user. Visit the app [here](https://alexaoh.shinyapps.io/birdapp/)!

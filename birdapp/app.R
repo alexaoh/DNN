@@ -10,27 +10,31 @@ library(tidyverse)
 
 # Could make a button in the app to switch between the two models!
 # Could be interesting to do this, for fun!
-#mod <- load_model_hdf5("www/finetunedXception1.h5")
+
+#mod <- load_model_hdf5("www/finetunedXception1.h5") # This is the initial model. 
 mod <- load_model_hdf5("www/tunedHypParamXception.h5")
 load("www/label_list.RData")
 target.size <- c(224,224,3)
-options(scipen=999) #prevent scientific number formatting
+options(scipen=999) # Prevent scientific number formatting.
 
 # Define the ui object. 
 ui <- dashboardPage(
-  skin="green",
+  skin = "black",
+  title = "BirdApp - Classify your Bird!",
   
   #(1) Header
   
-  dashboardHeader(title=tags$h1("Bird-App",style="font-size: 120%; font-weight: bold; color: white"),
+  dashboardHeader(title=tags$h1("BirdApp - Classify your Bird!",style="font-size: 120%; font-weight: bold; color: black"),
                   titleWidth = 350,
                   tags$li(class = "dropdown"),
                   dropdownMenu(type = "notifications", icon = icon("question-circle", "fa-1x"), badgeStatus = NULL,
                                headerText="",
+                               tags$li("Created by alexaoh, but"), 
                                tags$li(a(href = "https://forloopsandpiepkicks.wordpress.com",
                                          target = "_blank",
-                                         tagAppendAttributes(icon("icon-circle"), class = "info"),
-                                         "Created by"))
+                                         tagAppendAttributes(icon("exclamation-circle"), class = "info"),
+                                         "(heavily) inspired by (click here)"))
+                               
                   )),
   
   
@@ -40,7 +44,7 @@ ui <- dashboardPage(
     width=350,
     fileInput("input_image","File" ,accept = c('.jpg','.jpeg')), 
     tags$br(),
-    tags$p("Upload the image here.")
+    tags$p("Upload the image here (We only accept jpg and jpeg formats at this point).")
   ),
   
   
@@ -67,7 +71,6 @@ ui <- dashboardPage(
 server <- function(input, output) {
   
   image <- reactive({image_load(input$input_image$datapath, target_size = target.size[1:2])})
-  
   
   prediction <- reactive({
     if(is.null(input$input_image)){return(NULL)}
@@ -107,3 +110,4 @@ server <- function(input, output) {
 }
 
 shinyApp(ui, server)
+#rsconnect::deployApp()

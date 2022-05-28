@@ -63,7 +63,7 @@ test.images <- flow_images_from_directory(path.test,
                                           shuffle = F,
                                           seed = global.seed, 
                                           batch_size = 1) # Set batch size to 1 in order to
-# test on one image at a time. 
+                                                          # test on one image at a time. 
 
 # Get an idea of our data.
 #table(train.images$classes)
